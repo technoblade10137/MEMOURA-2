@@ -203,6 +203,51 @@ function getCurrentDisplayName() {
   return 'Patient';
 }
 
+function switchToRole(nextRole) {
+  const targetRole = nextRole === 'caregiver' ? 'caregiver' : 'patient';
+  const fallbackUser = targetRole === 'patient' ? state.patients[0]?.id : state.caregivers[0]?.id;
+  if (!fallbackUser) return;
+  state.currentRole = targetRole;
+  state.currentUserId = fallbackUser;
+  saveStore(state);
+  render();
+}
+
+function openSettingsModal() {
+  const existing = document.getElementById('settings-modal');
+  if (existing) existing.remove();
+  const modal = document.createElement('div');
+  modal.id = 'settings-modal';
+  modal.className = 'settings-modal show';
+  modal.innerHTML = `
+    <div class="modal-card">
+      <div class="topbar">
+        <h3>Settings</h3>
+        <button class="danger-btn" data-settings-close="close">Close</button>
+      </div>
+      <div class="settings-list">
+        <button class="small-btn ${state.currentRole === 'patient' ? 'active' : ''}" data-settings-role="patient">Patient view</button>
+        <button class="small-btn ${state.currentRole === 'caregiver' ? 'active' : ''}" data-settings-role="caregiver">Caregiver view</button>
+        <button class="small-btn ${state.settings.voiceOn ? 'active' : ''}" data-settings-voice="toggle">${state.settings.voiceOn ? 'Voice on' : 'Voice off'}</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  modal.querySelector('[data-settings-close]').addEventListener('click', () => modal.remove());
+  modal.querySelectorAll('[data-settings-role]').forEach((button) => {
+    button.addEventListener('click', () => {
+      switchToRole(button.dataset.settingsRole);
+      modal.remove();
+    });
+  });
+  modal.querySelector('[data-settings-voice]').addEventListener('click', () => {
+    state.settings.voiceOn = !state.settings.voiceOn;
+    saveStore(state);
+    render();
+    modal.remove();
+  });
+}
+
 function bindCaregiverForm() {
   document.getElementById('caregiver-register-form').addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -251,7 +296,7 @@ function renderPatientDashboard(patient) {
         </div>
         <div class="actions">
           <button class="small-btn" data-action="home">${t('home', state)}</button>
-          <button class="small-btn" data-action="switch-role">${state.currentRole === 'caregiver' ? 'Patient view' : 'Caregiver view'}</button>
+          <button class="small-btn" data-action="settings">Settings</button>
           <button class="small-btn" data-action="voice-toggle">${state.settings.voiceOn ? t('voiceOn', state) : t('voiceOff', state)}</button>
           <button class="small-btn" data-action="repeat">${t('repeat', state)}</button>
         </div>
@@ -346,6 +391,28 @@ function playWinSound() {
   setTimeout(() => audioCtx.close(), 500);
 }
 
+function playTeaSortingMusic() {
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtx) return;
+  const audioCtx = new AudioCtx();
+  const notes = [392, 440, 523.25, 440, 392];
+  notes.forEach((frequency, index) => {
+    const oscillator = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+    oscillator.type = 'sine';
+    oscillator.frequency.value = frequency;
+    gainNode.gain.value = 0.0001;
+    oscillator.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+    const start = audioCtx.currentTime + index * 0.42;
+    gainNode.gain.exponentialRampToValueAtTime(0.045, start + 0.08);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, start + 0.42);
+    oscillator.start(start);
+    oscillator.stop(start + 0.45);
+  });
+  setTimeout(() => audioCtx.close(), 2200);
+}
+
 function celebrateWin(message) {
   showToast(message);
   playWinSound();
@@ -365,15 +432,7 @@ function attachPatientEvents(patient) {
     });
   });
   document.querySelector('[data-action="home"]').addEventListener('click', () => renderPatientDashboard(patient));
-  document.querySelector('[data-action="switch-role"]').addEventListener('click', () => {
-    const nextRole = state.currentRole === 'caregiver' ? 'patient' : 'caregiver';
-    const nextUser = nextRole === 'patient' ? state.patients[0]?.id : state.caregivers[0]?.id;
-    if (!nextUser) return;
-    state.currentRole = nextRole;
-    state.currentUserId = nextUser;
-    saveStore(state);
-    render();
-  });
+  document.querySelector('[data-action="settings"]').addEventListener('click', () => openSettingsModal());
   document.querySelector('[data-action="voice-toggle"]').addEventListener('click', () => {
     state.settings.voiceOn = !state.settings.voiceOn;
     saveStore(state);
@@ -480,6 +539,7 @@ function renderMapView(patient) {
         <div class="home-map-board">
           ${state.rooms.map((room) => `
             <div class="home-room ${trackedRoom && trackedRoom.id === room.id ? 'tracked' : ''}" style="grid-column:${room.x}; grid-row:${room.y};">
+              ${trackedRoom && trackedRoom.id === room.id ? '<span class="live-tag">Live</span>' : ''}
               <strong>${room.name}</strong>
               <span>${room.x}, ${room.y}</span>
             </div>
@@ -551,6 +611,8 @@ function renderCaregiverDashboard(caregiver) {
           <div class="brand">MEMOURA Caregiver</div>
         </div>
         <div class="actions">
+          <button class="small-btn" data-action="open-map">Map</button>
+          <button class="small-btn" data-action="settings">Settings</button>
           <button class="small-btn" data-action="logout">Logout</button>
         </div>
       </div>
@@ -659,6 +721,8 @@ function renderCaregiverDashboard(caregiver) {
 }
 
 function bindCaregiverActions(caregiver, patient) {
+  document.querySelector('[data-action="open-map"]').addEventListener('click', () => renderMapView(patient));
+  document.querySelector('[data-action="settings"]').addEventListener('click', () => openSettingsModal());
   document.querySelector('[data-action="logout"]').addEventListener('click', () => {
     state.currentRole = null;
     state.currentUserId = null;
@@ -766,6 +830,9 @@ function openGameModal(name) {
     sequenceState.completed = false;
     renderGameModal();
     return;
+  }
+  if (name === 'Tea Leaf Sorting') {
+    playTeaSortingMusic();
   }
   renderGameModal();
 }
@@ -1006,6 +1073,7 @@ function attachGameEvents() {
         const itemName = item.dataset.item;
         const bowl = itemName === 'leaf' || itemName === 'tea' ? 'good' : 'bad';
         const isCorrect = bowl === 'good';
+        playTeaSortingMusic();
         if (isCorrect) {
           celebrateWin('Excellent sorting. The healthy leaves go here.');
         } else {
