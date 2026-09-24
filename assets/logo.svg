@@ -1,0 +1,13 @@
+<svg width="220" height="70" viewBox="0 0 220 70" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="g1" x1="0" y1="0" x2="220" y2="70" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#D95F5C"/>
+      <stop offset="1" stop-color="#86AEEB"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="216" height="66" rx="18" fill="#F5F8FF" stroke="url(#g1)" stroke-width="2"/>
+  <circle cx="36" cy="35" r="18" fill="url(#g1)"/>
+  <path d="M26 35C26 28.3726 31.3726 23 38 23H47.5C54.1274 23 59.5 28.3726 59.5 35V35C59.5 41.6274 54.1274 47 47.5 47H38C31.3726 47 26 41.6274 26 35V35Z" fill="#FFFFFF" fill-opacity="0.85"/>
+  <path d="M41 19L48 35H34L41 19Z" fill="#D95F5C" fill-opacity="0.9"/>
+  <text x="72" y="42" fill="#1F2A3D" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700">MEMOURA</text>
+</svg>

@@ -18,7 +18,11 @@ let app = null;
 let state = null;
 let currentGame = null;
 let activeQuestion = null;
+let currentRecallQuestions = [];
+let currentRecallIndex = 0;
 let sequenceState = { pattern: [], currentStep: 0, completed: false };
+let jigsawState = { placed: [] };
+let burgerSelection = [];
 let ludoState = { dice: 1, tokens: [0,0,0,0], ai: [0,0,0], turn: 'player' };
 
 if (typeof document !== 'undefined') {
@@ -48,7 +52,8 @@ function renderWelcome() {
   app.innerHTML = `
     <div class="app-shell">
       <div class="screen">
-        <div class="hero">
+        <div class="hero welcome-hero">
+          <img src="assets/logo.svg" alt="MEMOURA logo" class="brand-mark" />
           <h1>${t('appTitle', state)}</h1>
           <p>Memory • Routine • Care • Connection</p>
         </div>
@@ -63,6 +68,10 @@ function renderWelcome() {
           </button>
         </div>
         <div class="form-card">
+          <div class="role-switch-panel">
+            <button class="role-switch-btn active" data-role-switch="patient">Patient</button>
+            <button class="role-switch-btn" data-role-switch="caregiver">Caregiver</button>
+          </div>
           <div id="welcome-form-slot"></div>
         </div>
       </div>
@@ -76,6 +85,17 @@ function attachWelcomeEvents() {
     button.addEventListener('click', () => {
       const role = button.dataset.role;
       renderRoleForm(role);
+      document.querySelectorAll('.role-switch-btn').forEach((item) => {
+        item.classList.toggle('active', item.dataset.roleSwitch === role);
+      });
+    });
+  });
+
+  document.querySelectorAll('.role-switch-btn').forEach((button) => {
+    button.addEventListener('click', () => {
+      const role = button.dataset.roleSwitch;
+      document.querySelectorAll('.role-switch-btn').forEach((item) => item.classList.toggle('active', item === button));
+      renderRoleForm(role);
     });
   });
 }
@@ -86,7 +106,7 @@ function renderRoleForm(role) {
     slot.innerHTML = `
       <h3>${t('patientRegister', state)}</h3>
       <form id="patient-register-form" class="form-grid">
-        <div class="field"><label>${t('name', state)}</label><input name="name" required /></div>
+        <div class="field"><label>${t('name', state)}</label><input name="name" placeholder="Enter your name" required /></div>
         <div class="field"><label>${t('dob', state)}</label><input type="date" name="dob" required /></div>
         <div class="field"><label>${t('phone', state)}</label><input name="phone" required /></div>
         <div class="field"><label>${t('state', state)}</label>
@@ -119,9 +139,9 @@ function renderRoleForm(role) {
     slot.innerHTML = `
       <h3>${t('caregiverRegister', state)}</h3>
       <form id="caregiver-register-form" class="form-grid">
-        <div class="field"><label>Caregiver name</label><input name="caregiverName" required /></div>
+        <div class="field"><label>Caregiver name</label><input name="caregiverName" placeholder="Caregiver name" required /></div>
         <div class="field"><label>Caregiver phone</label><input name="caregiverPhone" required /></div>
-        <div class="field"><label>Patient name</label><input name="patientName" required /></div>
+        <div class="field"><label>Patient name</label><input name="patientName" placeholder="Patient name" required /></div>
         <div class="field"><label>Patient phone</label><input name="patientPhone" required /></div>
         <div class="field full"><label>${t('caregiverPassword', state)}</label><input type="password" name="password" required /></div>
         <div class="field full"><button type="submit" class="primary-btn">${t('register', state)}</button></div>
@@ -161,6 +181,19 @@ function bindPatientForm() {
     saveStore(state);
     render();
   });
+}
+
+function getCurrentDisplayName() {
+  const role = state.currentRole;
+  if (role === 'patient') {
+    const patient = state.patients.find((entry) => entry.id === state.currentUserId);
+    return patient?.name || 'Patient';
+  }
+  if (role === 'caregiver') {
+    const caregiver = state.caregivers.find((entry) => entry.id === state.currentUserId);
+    return caregiver?.name || 'Caregiver';
+  }
+  return 'Patient';
 }
 
 function bindCaregiverForm() {
@@ -205,9 +238,13 @@ function renderPatientDashboard(patient) {
   app.innerHTML = `
     <div class="app-shell">
       <div class="topbar">
-        <div class="brand">MEMOURA</div>
+        <div class="brand-wrap">
+          <img src="assets/logo.svg" alt="MEMOURA logo" class="brand-mark" />
+          <div class="brand">MEMOURA</div>
+        </div>
         <div class="actions">
           <button class="small-btn" data-action="home">${t('home', state)}</button>
+          <button class="small-btn" data-action="switch-role">${state.currentRole === 'caregiver' ? 'Patient view' : 'Caregiver view'}</button>
           <button class="small-btn" data-action="voice-toggle">${state.settings.voiceOn ? t('voiceOn', state) : t('voiceOff', state)}</button>
           <button class="small-btn" data-action="repeat">${t('repeat', state)}</button>
         </div>
@@ -321,6 +358,15 @@ function attachPatientEvents(patient) {
     });
   });
   document.querySelector('[data-action="home"]').addEventListener('click', () => renderPatientDashboard(patient));
+  document.querySelector('[data-action="switch-role"]').addEventListener('click', () => {
+    const nextRole = state.currentRole === 'caregiver' ? 'patient' : 'caregiver';
+    const nextUser = nextRole === 'patient' ? state.patients[0]?.id : state.caregivers[0]?.id;
+    if (!nextUser) return;
+    state.currentRole = nextRole;
+    state.currentUserId = nextUser;
+    saveStore(state);
+    render();
+  });
   document.querySelector('[data-action="voice-toggle"]').addEventListener('click', () => {
     state.settings.voiceOn = !state.settings.voiceOn;
     saveStore(state);
@@ -672,13 +718,22 @@ function getRecentMood(patientId) {
 
 function openGameModal(name) {
   currentGame = name;
+  jigsawState = { placed: [] };
+  burgerSelection = [];
   if (name === 'Memory Recall') {
-    activeQuestion = getRecallQuestion('Mixed');
+    const questions = [
+      getRecallQuestion('Mixed'),
+      getRecallQuestion('Food'),
+      getRecallQuestion('Places')
+    ];
+    currentRecallQuestions = questions;
+    currentRecallIndex = 0;
+    activeQuestion = questions[0];
     renderGameModal();
     return;
   }
   if (name === 'Sequence Recall') {
-    sequenceState.pattern = getSequencePattern(4);
+    sequenceState.pattern = ['Tea cup', 'Leaf', 'Bell', 'Garden'];
     sequenceState.currentStep = 0;
     sequenceState.completed = false;
     renderGameModal();
@@ -688,12 +743,14 @@ function openGameModal(name) {
 }
 
 function renderGameModal() {
+  const existing = document.getElementById('game-modal');
+  if (existing) existing.remove();
   const modal = document.createElement('div');
   modal.className = 'game-modal show';
   modal.id = 'game-modal';
   modal.innerHTML = `
     <div class="modal-card">
-      <div class="topbar">
+      <div class="topbar game-modal-header">
         <h3>${currentGame}</h3>
         <button class="danger-btn" data-game-close="exit">${t('exit', state)}</button>
       </div>
@@ -712,78 +769,118 @@ function renderGameModal() {
 function renderRecallGame() {
   const question = activeQuestion || getRecallQuestion('Mixed');
   return `
-    <div>
-      <p>${question.q}</p>
+    <div class="game-panel">
+      <p class="prompt-text">${question.q}</p>
       <div class="answer-btn-group">
         ${question.options.map((option) => `<button class="answer-btn" data-answer="${option}">${option}</button>`).join('')}
       </div>
+      <p class="mini-note">Question ${currentRecallIndex + 1} of ${currentRecallQuestions.length || 1}</p>
     </div>
   `;
 }
 
 function renderJigsawGame() {
-  const image = state.images[0];
-  const gridSize = 2;
-  const pieces = Array.from({ length: gridSize * gridSize }, (_, index) => index + 1);
+  const image = state.images[0]?.src || 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=800&q=80';
+  const pieces = [1, 2, 3, 4];
+  const placed = jigsawState.placed || [];
   return `
-    <div>
-      <button class="ghost-btn" id="show-jigsaw-picture">${t('showPicture', state)}</button>
-      <div class="grid-board" style="grid-template-columns: repeat(${gridSize}, minmax(0, 1fr));">
-        ${pieces.map((piece) => `<div class="puzzle-slot" data-slot="${piece}"><div class="puzzle-piece" draggable="true" data-piece="${piece}" style="background-image:url('${image?.src || 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=800&q=80'}')"></div></div>`).join('')}
+    <div class="game-panel">
+      <div class="jigsaw-preview">
+        <img src="${image}" alt="Puzzle preview" />
       </div>
-      <p id="jigsaw-status">Match the pieces in order.</p>
+      <div class="jigsaw-board" style="grid-template-columns: repeat(2, minmax(0, 1fr));">
+        ${pieces.map((piece) => `
+          <div class="puzzle-slot" data-slot="${piece}">
+            ${placed.includes(piece) ? `<div class="puzzle-piece placed" data-piece="${piece}" style="background-image:url('${image}'); background-position:${piece === 1 ? '0% 0%' : piece === 2 ? '100% 0%' : piece === 3 ? '0% 100%' : '100% 100%'}"></div>` : '<span>Place here</span>'}
+          </div>
+        `).join('')}
+      </div>
+      <div class="jigsaw-piece-bank">
+        ${pieces.map((piece) => `<button class="jigsaw-piece-card" data-jigsaw-piece="${piece}" style="background-image:url('${image}'); background-position:${piece === 1 ? '0% 0%' : piece === 2 ? '100% 0%' : piece === 3 ? '0% 100%' : '100% 100%'}"></button>`).join('')}
+      </div>
+      <p id="jigsaw-status">Arrange the picture in the right order.</p>
     </div>
   `;
 }
 
 function renderTeaGame() {
   return `
-    <div>
-      <div class="summary-grid">
-        <div class="bowl" data-target="good">Good leaves</div>
-        <div class="bowl" data-target="bad">Distractions</div>
+    <div class="game-panel">
+      <div class="tea-layout">
+        <div class="tea-visual good">
+          <img src="https://images.unsplash.com/photo-1515823064-d6e0c04616a7?auto=format&fit=crop&w=800&q=80" alt="Good tea leaves" />
+          <strong>Good leaves</strong>
+        </div>
+        <div class="tea-visual bad">
+          <img src="https://images.unsplash.com/photo-1515377905703-c4788e51af15?auto=format&fit=crop&w=800&q=80" alt="Bad tea leaves" />
+          <strong>Bad leaves</strong>
+        </div>
       </div>
-      <div class="ingredient-list">
-        <div class="ingredient-item" draggable="true" data-item="leaf">Leaf</div>
-        <div class="ingredient-item" draggable="true" data-item="stone">Stone</div>
-        <div class="ingredient-item" draggable="true" data-item="bird">Bird</div>
-        <div class="ingredient-item" draggable="true" data-item="tea">Tea leaf</div>
+      <div class="ingredient-list tea-list">
+        <button class="ingredient-item tea-item" data-item="leaf">Healthy leaf</button>
+        <button class="ingredient-item tea-item" data-item="stone">Dry leaf</button>
+        <button class="ingredient-item tea-item" data-item="bird">Broken leaf</button>
+        <button class="ingredient-item tea-item" data-item="tea">Fresh tea leaf</button>
+      </div>
+      <div class="summary-grid tea-bowls">
+        <div class="bowl" data-target="good">Good basket</div>
+        <div class="bowl" data-target="bad">Bad basket</div>
       </div>
     </div>
   `;
 }
 
 function renderDishGame() {
-  const dish = getDishChallenge(state.gamePreferences.favoriteFoods || ['Khar', 'Pitha']);
+  const order = ['Bun', 'Patty', 'Cheese', 'Lettuce', 'Tomato', 'Bun'];
+  const selection = burgerSelection || [];
   return `
-    <div>
-      <p>Build this dish from memory: ${dish.answer}</p>
-      <div class="dish-choices">
-        ${dish.ingredients.map((ingredient) => `<button class="ingredient-item" data-ingredient="${ingredient}">${ingredient}</button>`).join('')}
+    <div class="game-panel">
+      <p class="prompt-text">Build a burger in the correct order.</p>
+      <div class="burger-stage">
+        ${selection.length ? selection.map((ingredient) => `<div class="burger-layer">${ingredient}</div>`).join('') : '<div class="burger-empty">No ingredients yet</div>'}
       </div>
-      <button class="primary-btn" id="dish-done">DONE</button>
+      <div class="dish-choices burger-choices">
+        ${order.map((ingredient) => `<button class="ingredient-item burger-item" data-ingredient="${ingredient}">${ingredient}</button>`).join('')}
+      </div>
+      <button class="primary-btn" id="dish-done">Finish burger</button>
     </div>
   `;
 }
 
 function renderSequenceGame() {
+  const objects = ['Tea cup', 'Leaf', 'Bell', 'Garden'];
+  const pattern = sequenceState.pattern.length ? sequenceState.pattern : objects;
   return `
-    <div>
-      <p>Watch the glowing tiles, then repeat them.</p>
-      <div class="tile-grid" style="grid-template-columns: repeat(3, minmax(0, 1fr));">
-        ${Array.from({ length: 9 }, (_, index) => `<button class="tile" data-tile="${index + 1}">${index + 1}</button>`).join('')}
+    <div class="game-panel">
+      <p class="prompt-text">Watch the objects and then repeat them in order.</p>
+      <div class="object-sequence">
+        ${pattern.map((item) => `<span class="sequence-object">${item}</span>`).join('')}
       </div>
-      <button class="primary-btn" id="start-sequence">Start</button>
+      <div class="tile-grid object-grid" style="grid-template-columns: repeat(2, minmax(0, 1fr));">
+        ${objects.map((item) => `<button class="tile sequence-tile" data-tile="${item}">${item}</button>`).join('')}
+      </div>
+      <button class="primary-btn" id="start-sequence">Start sequence</button>
     </div>
   `;
 }
 
 function renderLudoGame() {
+  const board = Array.from({ length: 49 }, (_, index) => index);
+  const playerIndex = ludoState?.tokens?.[0] ?? 0;
+  const aiIndex = ludoState?.ai?.[0] ?? 0;
   return `
-    <div>
-      <button class="primary-btn" id="roll-dice">Roll Dice</button>
+    <div class="game-panel">
+      <button class="primary-btn" id="roll-dice">Roll dice</button>
+      <div class="ludo-status">You: ${playerIndex} • AI: ${aiIndex}</div>
       <div class="ludo-board">
-        ${Array.from({ length: 225 }, (_, index) => `<div class="ludo-cell ${index % 3 === 0 ? 'green' : ''}">${index + 1}</div>`).join('')}
+        ${board.map((cell) => {
+          const isPlayer = cell === playerIndex;
+          const isAi = cell === aiIndex;
+          return `<div class="ludo-cell ${cell % 3 === 0 ? 'green' : cell % 3 === 1 ? 'red' : 'blue'}">
+            ${isPlayer ? '<span class="ludo-token player-token"></span>' : ''}
+            ${isAi ? '<span class="ludo-token ai-token"></span>' : ''}
+          </div>`;
+        }).join('')}
       </div>
     </div>
   `;
@@ -801,98 +898,90 @@ function attachGameEvents() {
       button.addEventListener('click', () => {
         const selected = button.dataset.answer;
         const correct = activeQuestion.answer;
-        const result = selected === correct ? 'Correct! You are doing wonderfully well! 👏' : 'Almost! Let\'s try another one.';
-        if (selected === correct) {
-          celebrateWin('Wonderful work! Keep going.');
-        } else {
-          showToast(result);
+        const isCorrect = selected === correct;
+        if (isCorrect) {
+          currentRecallIndex += 1;
+          if (currentRecallIndex < currentRecallQuestions.length) {
+            activeQuestion = currentRecallQuestions[currentRecallIndex];
+            renderGameModal();
+            return;
+          }
+          celebrateWin('Wonderful work! You answered all three questions.');
+          const session = {
+            patientId: state.currentUserId,
+            game: 'Memory Recall',
+            difficulty: 'Medium',
+            score: 30,
+            correct: 3,
+            incorrect: 0,
+            accuracy: 100,
+            responseTime: 4,
+            completionStatus: 'completed',
+            hintsUsed: 0,
+            retries: 0,
+            abandonment: false,
+            aiChosenDifficulty: 'Medium',
+          };
+          saveSession(state, session);
+          updateDifficulty(state, session.patientId, 'Memory Recall', session);
+          document.getElementById('game-modal').remove();
+          return;
         }
-        const session = {
-          patientId: state.currentUserId,
-          game: 'Memory Recall',
-          difficulty: 'Medium',
-          score: selected === correct ? 10 : 5,
-          correct: selected === correct ? 1 : 0,
-          incorrect: selected === correct ? 0 : 1,
-          accuracy: selected === correct ? 100 : 50,
-          responseTime: 4,
-          completionStatus: 'completed',
-          hintsUsed: 0,
-          retries: 0,
-          abandonment: false,
-          aiChosenDifficulty: 'Medium',
-        };
-        saveSession(state, session);
-        updateDifficulty(state, session.patientId, 'Memory Recall', session);
-        document.getElementById('game-modal').remove();
+        showToast('Almost! Let\'s try another one.');
       });
     });
   }
 
   if (currentGame === 'Memory Jigsaw') {
-    document.getElementById('show-jigsaw-picture')?.addEventListener('click', () => {
-      alert('Picture hint is ready. Try matching the pieces in order.');
-    });
-    document.querySelectorAll('.puzzle-piece').forEach((piece) => {
-      piece.addEventListener('dragstart', (evt) => {
-        evt.dataTransfer.setData('text/plain', piece.dataset.piece);
-      });
-      piece.addEventListener('dragend', () => {
-        const status = document.getElementById('jigsaw-status');
-        status.textContent = 'Nice work!';
-      });
-    });
-    document.querySelectorAll('.puzzle-slot').forEach((slot) => {
-      slot.addEventListener('dragover', (evt) => evt.preventDefault());
-      slot.addEventListener('drop', (evt) => {
-        evt.preventDefault();
-        const pieceId = evt.dataTransfer.getData('text/plain');
-        const selected = document.querySelector(`[data-piece="${pieceId}"]`);
-        if (selected && slot.dataset.slot === pieceId) {
-          slot.appendChild(selected);
-          selected.setAttribute('draggable', 'false');
-          const status = document.getElementById('jigsaw-status');
-          status.textContent = 'Piece locked in place!';
-          celebrateWin('Nice job! You completed that one.');
-          const session = {
-            patientId: state.currentUserId,
-            game: 'Memory Jigsaw',
-            difficulty: 'Easy',
-            score: 10,
-            correct: 1,
-            incorrect: 0,
-            accuracy: 100,
-            responseTime: 2,
-            completionStatus: 'completed',
-            hintsUsed: 0,
-            retries: 0,
-            abandonment: false,
-            aiChosenDifficulty: 'Easy',
-          };
-          saveSession(state, session);
+    document.querySelectorAll('.jigsaw-piece-card').forEach((piece) => {
+      piece.addEventListener('click', () => {
+        const pieceId = Number(piece.dataset.jigsawPiece);
+        const nextSlot = (jigsawState.placed?.length || 0) + 1;
+        if (jigsawState.placed.includes(pieceId)) return;
+        jigsawState.placed = [...(jigsawState.placed || []), pieceId];
+        const correct = pieceId === nextSlot;
+        if (correct) {
+          showToast('Great placement!');
+          if (jigsawState.placed.length === 4) {
+            celebrateWin('Excellent! You completed the picture.');
+            const session = {
+              patientId: state.currentUserId,
+              game: 'Memory Jigsaw',
+              difficulty: 'Easy',
+              score: 10,
+              correct: 1,
+              incorrect: 0,
+              accuracy: 100,
+              responseTime: 3,
+              completionStatus: 'completed',
+              hintsUsed: 0,
+              retries: 0,
+              abandonment: false,
+              aiChosenDifficulty: 'Easy',
+            };
+            saveSession(state, session);
+            setTimeout(() => document.getElementById('game-modal')?.remove(), 500);
+          } else {
+            renderGameModal();
+          }
+        } else {
+          showToast('This piece belongs elsewhere. Try again.');
+          jigsawState.placed = (jigsawState.placed || []).filter((item) => item !== pieceId);
         }
       });
     });
   }
 
   if (currentGame === 'Tea Leaf Sorting') {
-    document.querySelectorAll('.ingredient-item').forEach((item) => {
-      item.addEventListener('dragstart', (evt) => {
-        evt.dataTransfer.setData('text/plain', item.dataset.item);
-      });
-    });
-    document.querySelectorAll('.bowl').forEach((bowl) => {
-      bowl.addEventListener('dragover', (evt) => evt.preventDefault());
-      bowl.addEventListener('drop', (evt) => {
-        evt.preventDefault();
-        const item = evt.dataTransfer.getData('text/plain');
-        const correct = item === 'leaf' || item === 'tea';
-        const bowlType = bowl.dataset.target;
-        const isCorrect = (correct && bowlType === 'good') || (!correct && bowlType === 'bad');
+    document.querySelectorAll('.tea-item').forEach((item) => {
+      item.addEventListener('click', () => {
+        const itemName = item.dataset.item;
+        const bowl = itemName === 'leaf' || itemName === 'tea' ? 'good' : 'bad';
+        const isCorrect = bowl === 'good';
         if (isCorrect) {
-          celebrateWin('Well done! You sorted it correctly.');
+          celebrateWin('Excellent sorting. The healthy leaves go here.');
         } else {
-          showToast('Let’s try another one.');
+          showToast('That leaf belongs in the bad basket.');
         }
         const session = {
           patientId: state.currentUserId,
@@ -910,80 +999,78 @@ function attachGameEvents() {
           aiChosenDifficulty: 'Easy',
         };
         saveSession(state, session);
+        document.getElementById('game-modal').remove();
       });
     });
   }
 
   if (currentGame === 'Build the Dish') {
-    let selected = [];
     document.querySelectorAll('[data-ingredient]').forEach((button) => {
       button.addEventListener('click', () => {
         const ingredient = button.dataset.ingredient;
-        selected.push(ingredient);
-        button.textContent = `${ingredient} ✓`;
+        if (burgerSelection.includes(ingredient)) return;
+        burgerSelection = [...(burgerSelection || []), ingredient];
+        button.classList.add('selected');
+        const order = ['Bun', 'Patty', 'Cheese', 'Lettuce', 'Tomato', 'Bun'];
+        if (burgerSelection.length === order.length) {
+          const valid = burgerSelection.every((item, index) => order[index] === item);
+          if (valid) {
+            celebrateWin('Perfect! Your burger is ready.');
+            const session = {
+              patientId: state.currentUserId,
+              game: 'Build the Dish',
+              difficulty: 'Medium',
+              score: 10,
+              correct: 1,
+              incorrect: 0,
+              accuracy: 100,
+              responseTime: 6,
+              completionStatus: 'completed',
+              hintsUsed: 0,
+              retries: 0,
+              abandonment: false,
+              aiChosenDifficulty: 'Medium',
+            };
+            saveSession(state, session);
+            document.getElementById('game-modal').remove();
+          } else {
+            showToast('Almost there. Build it in the right order.');
+            burgerSelection = [];
+            document.querySelectorAll('.burger-item').forEach((item) => item.classList.remove('selected'));
+            renderGameModal();
+          }
+        }
       });
     });
-    document.getElementById('dish-done').addEventListener('click', () => {
-      const dish = getDishChallenge(state.gamePreferences.favoriteFoods || ['Khar', 'Pitha']);
-      const correct = selected.includes(dish.answer);
-      if (correct) {
-        celebrateWin('Excellent! You built it just right.');
+    document.getElementById('dish-done')?.addEventListener('click', () => {
+      if (burgerSelection.length === 6) {
+        celebrateWin('Excellent! You built the burger.');
       } else {
-        showToast('Almost! Try the familiar food again.');
+        showToast('Add the remaining layers to finish the burger.');
       }
-      const session = {
-        patientId: state.currentUserId,
-        game: 'Build the Dish',
-        difficulty: 'Medium',
-        score: correct ? 10 : 5,
-        correct: correct ? 1 : 0,
-        incorrect: correct ? 0 : 1,
-        accuracy: correct ? 100 : 60,
-        responseTime: 6,
-        completionStatus: 'completed',
-        hintsUsed: 0,
-        retries: 0,
-        abandonment: false,
-        aiChosenDifficulty: 'Medium',
-      };
-      saveSession(state, session);
-      document.getElementById('game-modal').remove();
     });
   }
 
   if (currentGame === 'Sequence Recall') {
     document.getElementById('start-sequence').addEventListener('click', () => {
-      sequenceState.pattern = getSequencePattern(4);
+      const items = ['Tea cup', 'Leaf', 'Bell', 'Garden'];
+      sequenceState.pattern = [...items];
       sequenceState.currentStep = 0;
-      sequenceState.completed = false;
-      document.querySelectorAll('.tile').forEach((tile) => {
+      document.querySelectorAll('.sequence-tile').forEach((tile) => {
         tile.classList.remove('active');
       });
-      const tiles = [...document.querySelectorAll('.tile')];
-      tiles.forEach((tile) => tile.disabled = true);
-      const showPattern = () => {
-        sequenceState.pattern.forEach((index, i) => {
-          setTimeout(() => {
-            const tile = tiles[index - 1];
-            if (tile) { tile.classList.add('active'); setTimeout(() => tile.classList.remove('active'), 400); }
-          }, i * 500);
-        });
-        setTimeout(() => {
-          tiles.forEach((tile) => tile.disabled = false);
-        }, sequenceState.pattern.length * 600);
-      };
-      showPattern();
+      showToast('Watch and then repeat the order.');
     });
 
-    document.querySelectorAll('.tile').forEach((tile) => {
+    document.querySelectorAll('.sequence-tile').forEach((tile) => {
       tile.addEventListener('click', () => {
         const expected = sequenceState.pattern[sequenceState.currentStep];
-        const actual = Number(tile.dataset.tile);
+        const actual = tile.dataset.tile;
         if (actual === expected) {
           sequenceState.currentStep += 1;
           tile.classList.add('active');
           if (sequenceState.currentStep === sequenceState.pattern.length) {
-            celebrateWin('Excellent! You remembered the sequence.');
+            celebrateWin('Excellent! You remembered the object order.');
             const session = {
               patientId: state.currentUserId,
               game: 'Sequence Recall',
@@ -1003,7 +1090,7 @@ function attachGameEvents() {
             document.getElementById('game-modal').remove();
           }
         } else {
-          showToast('Almost! Let\'s try another one.');
+          showToast('That was not the right object. Try the order again.');
         }
       });
     });
@@ -1013,9 +1100,31 @@ function attachGameEvents() {
     document.getElementById('roll-dice').addEventListener('click', () => {
       const value = Math.floor(Math.random() * 6) + 1;
       ludoState.dice = value;
-      const tokenStep = Math.min((ludoState.tokens[0] || 0) + value, 10);
-      ludoState.tokens[0] = tokenStep;
-      showToast(`Dice: ${value}`);
+      const move = Math.min((ludoState.tokens[0] || 0) + value, 48);
+      ludoState.tokens[0] = move;
+      const aiMove = Math.min((ludoState.ai[0] || 0) + (Math.floor(Math.random() * 6) + 1), 48);
+      ludoState.ai[0] = aiMove;
+      showToast(`Dice: ${value}. Your token moved to ${move}`);
+      renderGameModal();
+      if (move >= 48 || aiMove >= 48) {
+        celebrateWin(move >= 48 ? 'You won the match!' : 'The AI reached the finish first.');
+        const session = {
+          patientId: state.currentUserId,
+          game: 'Ludo',
+          difficulty: 'Medium',
+          score: move >= 48 ? 10 : 5,
+          correct: move >= 48 ? 1 : 0,
+          incorrect: move >= 48 ? 0 : 1,
+          accuracy: move >= 48 ? 100 : 50,
+          responseTime: 6,
+          completionStatus: 'completed',
+          hintsUsed: 0,
+          retries: 0,
+          abandonment: false,
+          aiChosenDifficulty: 'Medium',
+        };
+        saveSession(state, session);
+      }
     });
   }
 }
