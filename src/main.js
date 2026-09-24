@@ -24,6 +24,13 @@ let sequenceState = { pattern: [], currentStep: 0, completed: false };
 let jigsawState = { placed: [] };
 let burgerSelection = [];
 let ludoState = { dice: 1, tokens: [0,0,0,0], ai: [0,0,0], turn: 'player' };
+const ingredientArt = {
+  Bun: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=600&q=80',
+  Patty: 'https://images.unsplash.com/photo-1550317138-10000687a72b?auto=format&fit=crop&w=600&q=80',
+  Cheese: 'https://images.unsplash.com/photo-1565958011703-44f9829ba187?auto=format&fit=crop&w=600&q=80',
+  Lettuce: 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=600&q=80',
+  Tomato: 'https://images.unsplash.com/photo-1546094096-0df4bcaaa337?auto=format&fit=crop&w=600&q=80',
+};
 
 if (typeof document !== 'undefined') {
   app = document.getElementById('app');
@@ -53,7 +60,7 @@ function renderWelcome() {
     <div class="app-shell">
       <div class="screen">
         <div class="hero welcome-hero">
-          <img src="assets/logo.svg" alt="MEMOURA logo" class="brand-mark" />
+          <img src="logo.jpeg" alt="MEMOURA logo" class="brand-mark" />
           <h1>${t('appTitle', state)}</h1>
           <p>Memory • Routine • Care • Connection</p>
         </div>
@@ -239,7 +246,7 @@ function renderPatientDashboard(patient) {
     <div class="app-shell">
       <div class="topbar">
         <div class="brand-wrap">
-          <img src="assets/logo.svg" alt="MEMOURA logo" class="brand-mark" />
+          <img src="logo.jpeg" alt="MEMOURA logo" class="brand-mark" />
           <div class="brand">MEMOURA</div>
         </div>
         <div class="actions">
@@ -455,13 +462,31 @@ function renderReminderView(patient) {
 }
 
 function renderMapView(patient) {
+  const trackedRoom = state.locationSharing
+    ? (state.rooms.find((room) => /Kitchen|Living|Garden/i.test(room.name)) || state.rooms[0])
+    : null;
+
   app.innerHTML = `
     <div class="app-shell">
       <div class="topbar"><div class="brand">${t('map', state)}</div><button class="small-btn" data-action="home">${t('home', state)}</button></div>
-      <div class="panel">
-        <div class="summary-card">Location Sharing: <strong>${state.locationSharing ? 'ON' : 'OFF'}</strong> <button class="primary-btn" id="toggle-location">${state.locationSharing ? 'Turn OFF' : 'Turn ON'}</button></div>
-        <div class="map-grid">
-          ${state.rooms.map((room) => `<div class="room-card"><strong>${room.name}</strong><div>Room ${room.x}, ${room.y}</div></div>`).join('')}
+      <div class="panel map-panel">
+        <div class="summary-card location-status">
+          <div>
+            <strong>Home Tracking</strong>
+            <div>${state.locationSharing ? 'Location sharing is ON' : 'Location sharing is OFF'}</div>
+          </div>
+          <button class="primary-btn" id="toggle-location">${state.locationSharing ? 'Turn OFF' : 'Turn ON'}</button>
+        </div>
+        <div class="home-map-board">
+          ${state.rooms.map((room) => `
+            <div class="home-room ${trackedRoom && trackedRoom.id === room.id ? 'tracked' : ''}" style="grid-column:${room.x}; grid-row:${room.y};">
+              <strong>${room.name}</strong>
+              <span>${room.x}, ${room.y}</span>
+            </div>
+          `).join('')}
+        </div>
+        <div class="track-summary">
+          <strong>Current location:</strong> ${trackedRoom ? trackedRoom.name : 'Tracking paused'}
         </div>
       </div>
     </div>
@@ -521,7 +546,10 @@ function renderCaregiverDashboard(caregiver) {
   app.innerHTML = `
     <div class="app-shell">
       <div class="topbar">
-        <div class="brand">MEMOURA Caregiver</div>
+        <div class="brand-wrap">
+          <img src="logo.jpeg" alt="MEMOURA logo" class="brand-mark" />
+          <div class="brand">MEMOURA Caregiver</div>
+        </div>
         <div class="actions">
           <button class="small-btn" data-action="logout">Logout</button>
         </div>
@@ -837,10 +865,10 @@ function renderDishGame() {
     <div class="game-panel">
       <p class="prompt-text">Build a burger in the correct order.</p>
       <div class="burger-stage">
-        ${selection.length ? selection.map((ingredient) => `<div class="burger-layer">${ingredient}</div>`).join('') : '<div class="burger-empty">No ingredients yet</div>'}
+        ${selection.length ? selection.map((ingredient) => `<div class="burger-layer"><img src="${ingredientArt[ingredient]}" alt="${ingredient}" /><span>${ingredient}</span></div>`).join('') : '<div class="burger-empty">No ingredients yet</div>'}
       </div>
       <div class="dish-choices burger-choices">
-        ${order.map((ingredient) => `<button class="ingredient-item burger-item" data-ingredient="${ingredient}">${ingredient}</button>`).join('')}
+        ${order.map((ingredient) => `<button class="ingredient-item burger-item" data-ingredient="${ingredient}"><img src="${ingredientArt[ingredient]}" alt="${ingredient}" /><span>${ingredient}</span></button>`).join('')}
       </div>
       <button class="primary-btn" id="dish-done">Finish burger</button>
     </div>
@@ -1008,7 +1036,6 @@ function attachGameEvents() {
     document.querySelectorAll('[data-ingredient]').forEach((button) => {
       button.addEventListener('click', () => {
         const ingredient = button.dataset.ingredient;
-        if (burgerSelection.includes(ingredient)) return;
         burgerSelection = [...(burgerSelection || []), ingredient];
         button.classList.add('selected');
         const order = ['Bun', 'Patty', 'Cheese', 'Lettuce', 'Tomato', 'Bun'];
@@ -1039,6 +1066,8 @@ function attachGameEvents() {
             document.querySelectorAll('.burger-item').forEach((item) => item.classList.remove('selected'));
             renderGameModal();
           }
+        } else {
+          renderGameModal();
         }
       });
     });
