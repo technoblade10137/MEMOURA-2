@@ -7,7 +7,7 @@ import { speakText } from './tts.js';
 import { showToast, requestNotificationPermission } from './notifications.js';
 import { addReminder, updateReminderStatus } from './reminders.js';
 import { addRoutine } from './routines.js';
-import { addJigsawImage } from './images.js';
+import { addJigsawImage, addMemoryRecallImage } from './images.js';
 import { toggleLocationSharing, addRoom } from './maps.js';
 import { saveSession } from './sessions.js';
 import { chooseDailyActivity, updateDifficulty } from './ai-difficulty.js';
@@ -24,6 +24,7 @@ let sequenceState = { pattern: [], currentStep: 0, completed: false };
 let jigsawState = { placed: [], draggedPiece: null };
 let burgerSelection = [];
 let ludoState = { dice: 1, tokens: [0,0,0,0], ai: [0,0,0], turn: 'player' };
+let teaMusicSession = null;
 const ingredientArt = {
   Bun: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=600&q=80',
   Patty: 'https://images.unsplash.com/photo-1550317138-10000687a72b?auto=format&fit=crop&w=600&q=80',
@@ -391,26 +392,81 @@ function playWinSound() {
   setTimeout(() => audioCtx.close(), 500);
 }
 
+function stopTeaSortingMusic() {
+  if (!teaMusicSession) return;
+  const { audioCtx, noiseSource, droneOscillator, masterGain, loopId } = teaMusicSession;
+
+  if (loopId) {
+    clearInterval(loopId);
+  }
+  if (noiseSource) noiseSource.stop();
+  if (droneOscillator) droneOscillator.stop();
+  if (masterGain) {
+    masterGain.gain.setTargetAtTime(0.0001, audioCtx.currentTime, 0.25);
+  }
+  setTimeout(() => {
+    if (audioCtx.state !== 'closed') audioCtx.close();
+    teaMusicSession = null;
+  }, 350);
+}
+
 function playTeaSortingMusic() {
   const AudioCtx = window.AudioContext || window.webkitAudioContext;
   if (!AudioCtx) return;
+
+  if (teaMusicSession && teaMusicSession.audioCtx && teaMusicSession.audioCtx.state !== 'closed') {
+    return;
+  }
+
   const audioCtx = new AudioCtx();
-  const notes = [392, 440, 523.25, 440, 392];
-  notes.forEach((frequency, index) => {
+  const masterGain = audioCtx.createGain();
+  masterGain.gain.value = 0.035;
+  masterGain.connect(audioCtx.destination);
+
+  const droneOscillator = audioCtx.createOscillator();
+  droneOscillator.type = 'sine';
+  droneOscillator.frequency.value = 196;
+  const droneGain = audioCtx.createGain();
+  droneGain.gain.value = 0.018;
+  droneOscillator.connect(droneGain).connect(masterGain);
+  droneOscillator.start();
+
+  const noiseBuffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 2, audioCtx.sampleRate);
+  const noiseData = noiseBuffer.getChannelData(0);
+  for (let index = 0; index < noiseData.length; index += 1) {
+    noiseData[index] = (Math.random() * 2 - 1) * 0.12;
+  }
+  const noiseSource = audioCtx.createBufferSource();
+  noiseSource.buffer = noiseBuffer;
+  noiseSource.loop = true;
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = 1100;
+  const noiseGain = audioCtx.createGain();
+  noiseGain.gain.value = 0.015;
+  noiseSource.connect(filter).connect(noiseGain).connect(masterGain);
+  noiseSource.start();
+
+  const notes = [261.63, 329.63, 392.0, 349.23, 293.66, 392.0];
+  let noteStep = 0;
+  const loopId = setInterval(() => {
+    if (!teaMusicSession || !audioCtx || audioCtx.state === 'closed') return;
+    const note = notes[noteStep % notes.length];
     const oscillator = audioCtx.createOscillator();
-    const gainNode = audioCtx.createGain();
+    const noteGain = audioCtx.createGain();
     oscillator.type = 'sine';
-    oscillator.frequency.value = frequency;
-    gainNode.gain.value = 0.0001;
-    oscillator.connect(gainNode);
-    gainNode.connect(audioCtx.destination);
-    const start = audioCtx.currentTime + index * 0.42;
-    gainNode.gain.exponentialRampToValueAtTime(0.045, start + 0.08);
-    gainNode.gain.exponentialRampToValueAtTime(0.0001, start + 0.42);
+    oscillator.frequency.value = note;
+    noteGain.gain.value = 0.0001;
+    oscillator.connect(noteGain).connect(masterGain);
+    const start = audioCtx.currentTime;
+    noteGain.gain.exponentialRampToValueAtTime(0.018, start + 0.18);
+    noteGain.gain.exponentialRampToValueAtTime(0.0001, start + 1.3);
     oscillator.start(start);
-    oscillator.stop(start + 0.45);
-  });
-  setTimeout(() => audioCtx.close(), 2200);
+    oscillator.stop(start + 1.4);
+    noteStep += 1;
+  }, 1600);
+
+  teaMusicSession = { audioCtx, masterGain, noiseSource, droneOscillator, loopId };
 }
 
 function celebrateWin(message) {
@@ -672,7 +728,23 @@ function renderCaregiverDashboard(caregiver) {
               <div class="field full"><button class="primary-btn" type="submit">Upload</button></div>
             </form>
             <div class="summary-grid">
-              ${state.images.filter((image) => image.patientId === patient.id).map((image) => `<div class="summary-card"><img src="${image.src}" alt="" style="width:100%;height:80px;object-fit:cover;border-radius:12px" /><p>${image.title}</p></div>`).join('') || '<p>No images yet.</p>'}
+              ${state.images.filter((image) => image.patientId === patient.id && image.type !== 'memory-recall').map((image) => `<div class="summary-card"><img src="${image.src}" alt="" style="width:100%;height:80px;object-fit:cover;border-radius:12px" /><p>${image.title}</p></div>`).join('') || '<p>No images yet.</p>'}
+            </div>
+          </div>
+          <div class="panel">
+            <h3>Memory Recall Scene Manager</h3>
+            <form id="memory-recall-form" class="form-grid">
+              <div class="field full"><input type="text" name="title" placeholder="Scene title" /></div>
+              <div class="field full"><textarea name="question" placeholder="Ask what happened in this moment" required></textarea></div>
+              <div class="field"><input type="text" name="answer" placeholder="Correct answer" required /></div>
+              <div class="field"><input type="text" name="option2" placeholder="Wrong choice 1" required /></div>
+              <div class="field"><input type="text" name="option3" placeholder="Wrong choice 2" required /></div>
+              <div class="field"><input type="text" name="option4" placeholder="Wrong choice 3" required /></div>
+              <div class="field full"><input type="file" name="image" accept="image/*" required /></div>
+              <div class="field full"><button class="primary-btn" type="submit">Add memory scene</button></div>
+            </form>
+            <div class="summary-grid">
+              ${state.images.filter((image) => image.patientId === patient.id && image.type === 'memory-recall').map((image) => `<div class="summary-card"><img src="${image.src}" alt="" style="width:100%;height:80px;object-fit:cover;border-radius:12px" /><p>${image.title}</p><small>${image.memoryRecallQuestion}</small></div>`).join('') || '<p>No memory scenes yet.</p>'}
             </div>
           </div>
           <div class="panel">
@@ -781,6 +853,36 @@ function bindCaregiverActions(caregiver, patient) {
     reader.readAsDataURL(file);
   });
 
+  document.getElementById('memory-recall-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const file = formData.get('image');
+    if (!file || !file.name) return;
+    const question = formData.get('question')?.toString().trim();
+    const answer = formData.get('answer')?.toString().trim();
+    const options = [
+      formData.get('answer')?.toString().trim(),
+      formData.get('option2')?.toString().trim(),
+      formData.get('option3')?.toString().trim(),
+      formData.get('option4')?.toString().trim(),
+    ].filter(Boolean);
+    if (!question || !answer || options.length < 4) {
+      showToast('Please add the question and four answer choices.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      addMemoryRecallImage(state, patient.id, reader.result, {
+        title: formData.get('title') || 'Memory scene',
+        question,
+        answer,
+        options,
+      });
+      render();
+    };
+    reader.readAsDataURL(file);
+  });
+
   document.getElementById('room-form').addEventListener('submit', (event) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
@@ -808,16 +910,33 @@ function getRecentMood(patientId) {
   return moodLabel(last.mood, state);
 }
 
+function buildMemoryRecallSceneList(patientId) {
+  const uploaded = (state.images || []).filter((image) => image.patientId === patientId && image.type === 'memory-recall');
+  const scenes = uploaded.length
+    ? uploaded.map((image) => ({
+        q: image.memoryRecallQuestion || 'What happened during this moment?',
+        options: Array.isArray(image.memoryRecallOptions) && image.memoryRecallOptions.length ? image.memoryRecallOptions : [image.memoryRecallAnswer || 'Family time', 'Tea break', 'Garden walk', 'Quiet rest'],
+        answer: image.memoryRecallAnswer || 'Family time',
+        image: image.src,
+      }))
+    : [
+        { q: 'What do you usually do at home in this moment?', options: ['Have tea with family', 'Go to work', 'Visit the market', 'Ride a bus'], answer: 'Have tea with family', image: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=800&q=80' },
+        { q: 'What do you enjoy doing in the garden?', options: ['Watering plants and sitting in the shade', 'Driving to the office', 'Buying groceries', 'Watching TV indoors'], answer: 'Watering plants and sitting in the shade', image: 'https://images.unsplash.com/photo-1466692476868-aef1dfb1e735?auto=format&fit=crop&w=800&q=80' },
+        { q: 'Who usually goes with you to the temple?', options: ['My family and friends', 'Only strangers', 'Only my teacher', 'No one'], answer: 'My family and friends', image: 'https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=800&q=80' },
+        { q: 'What do you usually do at this place with your family?', options: ['Share food and talk together', 'Run to the office', 'Take a long train ride', 'Work in a shop'], answer: 'Share food and talk together', image: 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=800&q=80' },
+        { q: 'What happens here when you visit this place?', options: ['We spend time together and feel calm', 'We rush to catch a flight', 'We clean the whole town', 'We go to school'], answer: 'We spend time together and feel calm', image: 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&w=800&q=80' }
+      ];
+
+  return scenes.slice(0, 5);
+}
+
 function openGameModal(name) {
   currentGame = name;
   jigsawState = { placed: [], draggedPiece: null };
   burgerSelection = [];
   if (name === 'Memory Recall') {
-    const questions = [
-      getRecallQuestion('Mixed'),
-      getRecallQuestion('Food'),
-      getRecallQuestion('Places')
-    ];
+    const patientId = state.currentUserId || state.patients[0]?.id;
+    const questions = buildMemoryRecallSceneList(patientId);
     currentRecallQuestions = questions;
     currentRecallIndex = 0;
     activeQuestion = questions[0];
@@ -841,11 +960,11 @@ function renderGameModal() {
   const existing = document.getElementById('game-modal');
   if (existing) existing.remove();
   const modal = document.createElement('div');
-  modal.className = 'game-modal show';
+  modal.className = `game-modal show ${currentGame === 'Build the Dish' ? 'build-the-dish' : ''}`.trim();
   modal.id = 'game-modal';
   modal.innerHTML = `
-    <div class="modal-card">
-      <div class="topbar game-modal-header">
+    <div class="modal-card ${currentGame === 'Build the Dish' ? 'build-the-dish-card' : ''}">
+      <div class="topbar game-modal-header ${currentGame === 'Build the Dish' ? 'hidden' : ''}">
         <h3>${currentGame}</h3>
         <button class="danger-btn" data-game-close="exit">${t('exit', state)}</button>
       </div>
@@ -865,6 +984,7 @@ function renderRecallGame() {
   const question = activeQuestion || getRecallQuestion('Mixed');
   return `
     <div class="game-panel">
+      ${question.image ? `<div class="memory-recall-image"><img src="${question.image}" alt="Memory prompt" /></div>` : ''}
       <p class="prompt-text">${question.q}</p>
       <div class="answer-btn-group">
         ${question.options.map((option) => `<button class="answer-btn" data-answer="${option}">${option}</button>`).join('')}
@@ -921,45 +1041,99 @@ function renderJigsawGame() {
 }
 
 function renderTeaGame() {
+  const leaves = [
+    { type: 'green', id: 'g1', rotation: -28, offsetX: '-46px', offsetY: '20px', size: 82 },
+    { type: 'green', id: 'g2', rotation: 34, offsetX: '6px', offsetY: '-18px', size: 96 },
+    { type: 'green', id: 'g3', rotation: -12, offsetX: '-18px', offsetY: '14px', size: 88 },
+    { type: 'green', id: 'g4', rotation: 22, offsetX: '34px', offsetY: '28px', size: 90 },
+    { type: 'green', id: 'g5', rotation: -36, offsetX: '22px', offsetY: '-12px', size: 84 },
+    { type: 'green', id: 'g6', rotation: 18, offsetX: '-30px', offsetY: '-20px', size: 98 },
+    { type: 'green', id: 'g7', rotation: -44, offsetX: '40px', offsetY: '-24px', size: 80 },
+    { type: 'green', id: 'g8', rotation: 40, offsetX: '-8px', offsetY: '26px', size: 92 },
+    { type: 'brown', id: 'b1', rotation: 26, offsetX: '24px', offsetY: '18px', size: 88 },
+    { type: 'brown', id: 'b2', rotation: -18, offsetX: '-38px', offsetY: '-6px', size: 96 },
+    { type: 'brown', id: 'b3', rotation: 44, offsetX: '18px', offsetY: '-14px', size: 84 },
+    { type: 'brown', id: 'b4', rotation: -32, offsetX: '10px', offsetY: '32px', size: 90 },
+    { type: 'brown', id: 'b5', rotation: 14, offsetX: '-24px', offsetY: '22px', size: 92 },
+    { type: 'brown', id: 'b6', rotation: -40, offsetX: '42px', offsetY: '12px', size: 86 },
+    { type: 'brown', id: 'b7', rotation: 30, offsetX: '-16px', offsetY: '-22px', size: 94 },
+    { type: 'brown', id: 'b8', rotation: -16, offsetX: '36px', offsetY: '-18px', size: 82 },
+  ];
+
   return `
-    <div class="game-panel">
-      <div class="tea-layout">
-        <div class="tea-visual good">
-          <img src="https://images.unsplash.com/photo-1515823064-d6e0c04616a7?auto=format&fit=crop&w=800&q=80" alt="Good tea leaves" />
-          <strong>Good leaves</strong>
+    <div class="game-panel tea-sort-panel">
+      <div class="leaf-sort-scene">
+        <div class="leaf-baskets">
+          <div class="leaf-basket good-zone" data-target="good">
+            <div class="basket-handle"></div>
+            <div class="basket-body">
+              <span class="basket-label">Good</span>
+            </div>
+          </div>
+          <div class="leaf-basket bad-zone" data-target="bad">
+            <div class="basket-handle"></div>
+            <div class="basket-body">
+              <span class="basket-label">Bad</span>
+            </div>
+          </div>
         </div>
-        <div class="tea-visual bad">
-          <img src="https://images.unsplash.com/photo-1515377905703-c4788e51af15?auto=format&fit=crop&w=800&q=80" alt="Bad tea leaves" />
-          <strong>Bad leaves</strong>
+
+        <div class="leaf-sort-bank">
+          ${leaves.map((leaf) => `
+            <div
+              class="leaf-token ${leaf.type === 'green' ? 'green-leaf' : 'brown-leaf'}"
+              draggable="true"
+              data-leaf-type="${leaf.type}"
+              data-leaf-id="${leaf.id}"
+              style="--rotation:${leaf.rotation}deg; --offset-x:${leaf.offsetX}; --offset-y:${leaf.offsetY}; --leaf-size:${leaf.size}px;"
+              aria-label="${leaf.type === 'green' ? 'Green leaf' : 'Brown leaf'}"
+            ></div>
+          `).join('')}
         </div>
       </div>
-      <div class="ingredient-list tea-list">
-        <button class="ingredient-item tea-item" data-item="leaf">Healthy leaf</button>
-        <button class="ingredient-item tea-item" data-item="stone">Dry leaf</button>
-        <button class="ingredient-item tea-item" data-item="bird">Broken leaf</button>
-        <button class="ingredient-item tea-item" data-item="tea">Fresh tea leaf</button>
-      </div>
-      <div class="summary-grid tea-bowls">
-        <div class="bowl" data-target="good">Good basket</div>
-        <div class="bowl" data-target="bad">Bad basket</div>
-      </div>
+      <p class="prompt-text">Drag the green leaves into the Good basket and the brown leaves into the Bad basket.</p>
     </div>
   `;
 }
 
 function renderDishGame() {
-  const order = ['Bun', 'Patty', 'Cheese', 'Lettuce', 'Tomato', 'Bun'];
+  const order = ['B', 'L', 'T', 'C', 'O'];
   const selection = burgerSelection || [];
   return `
-    <div class="game-panel">
-      <p class="prompt-text">Build a burger in the correct order.</p>
-      <div class="burger-stage">
-        ${selection.length ? selection.map((ingredient) => `<div class="burger-layer"><img src="${ingredientArt[ingredient]}" alt="${ingredient}" /><span>${ingredient}</span></div>`).join('') : '<div class="burger-empty">No ingredients yet</div>'}
+    <div class="dish-scene">
+      <div class="dish-topbar">
+        <button class="dish-back-btn" type="button">Back</button>
+        <div class="dish-timer">15s</div>
+        <div class="dish-level">
+          <div class="dish-level-badge">Level 2</div>
+          <div class="dish-level-count">1 of 3</div>
+        </div>
       </div>
-      <div class="dish-choices burger-choices">
-        ${order.map((ingredient) => `<button class="ingredient-item burger-item" data-ingredient="${ingredient}"><img src="${ingredientArt[ingredient]}" alt="${ingredient}" /><span>${ingredient}</span></button>`).join('')}
+
+      <div class="dish-stage">
+        <div class="dish-stack" aria-label="Dish preview">
+          <div class="dish-bun bun-top"></div>
+          <div class="dish-bun bun-middle"></div>
+          <div class="dish-bun bun-bottom"></div>
+        </div>
+
+        <div class="dish-target-letters" aria-label="Target letters">
+          <div class="dish-target-letter">O</div>
+          <div class="dish-target-letter">B</div>
+          <div class="dish-target-letter">O</div>
+        </div>
       </div>
-      <button class="primary-btn" id="dish-done">Finish burger</button>
+
+      <div class="dish-controls">
+        <button class="dish-action dish-clear" id="dish-clear" type="button">Clear</button>
+        <button class="dish-action dish-remove" id="dish-remove" type="button"><span class="dish-remove-icon">△</span>Remove</button>
+      </div>
+
+      <div class="dish-letter-bank">
+        ${order.map((letter) => `
+          <button class="dish-letter ${selection.includes(letter) ? 'selected' : ''}" data-ingredient="${letter}" type="button">${letter}</button>
+        `).join('')}
+      </div>
     </div>
   `;
 }
@@ -1008,6 +1182,9 @@ function attachGameEvents() {
     const modal = document.getElementById('game-modal');
     modal.remove();
     currentGame = null;
+    if (teaMusicSession) {
+      stopTeaSortingMusic();
+    }
   });
 
   if (currentGame === 'Memory Recall') {
@@ -1023,13 +1200,13 @@ function attachGameEvents() {
             renderGameModal();
             return;
           }
-          celebrateWin('Wonderful work! You answered all three questions.');
+          celebrateWin(`Wonderful work! You answered all ${currentRecallQuestions.length} memory moments.`);
           const session = {
             patientId: state.currentUserId,
             game: 'Memory Recall',
             difficulty: 'Medium',
-            score: 30,
-            correct: 3,
+            score: currentRecallQuestions.length * 10,
+            correct: currentRecallQuestions.length,
             incorrect: 0,
             accuracy: 100,
             responseTime: 4,
@@ -1044,7 +1221,7 @@ function attachGameEvents() {
           document.getElementById('game-modal').remove();
           return;
         }
-        showToast('Almost! Let\'s try another one.');
+        showToast('Almost! Let\'s try another memory moment.');
       });
     });
   }
@@ -1115,83 +1292,103 @@ function attachGameEvents() {
   }
 
   if (currentGame === 'Tea Leaf Sorting') {
-    document.querySelectorAll('.tea-item').forEach((item) => {
-      item.addEventListener('click', () => {
-        const itemName = item.dataset.item;
-        const bowl = itemName === 'leaf' || itemName === 'tea' ? 'good' : 'bad';
-        const isCorrect = bowl === 'good';
-        playTeaSortingMusic();
-        if (isCorrect) {
-          celebrateWin('Excellent sorting. The healthy leaves go here.');
-        } else {
-          showToast('That leaf belongs in the bad basket.');
+    const leafBank = document.querySelector('.leaf-sort-bank');
+    const allLeaves = document.querySelectorAll('.leaf-token');
+    const baskets = document.querySelectorAll('.leaf-basket');
+
+    allLeaves.forEach((leaf) => {
+      leaf.addEventListener('dragstart', (event) => {
+        if (leaf.classList.contains('sorted')) {
+          event.preventDefault();
+          return;
         }
-        const session = {
-          patientId: state.currentUserId,
-          game: 'Tea Leaf Sorting',
-          difficulty: 'Easy',
-          score: isCorrect ? 10 : 5,
-          correct: isCorrect ? 1 : 0,
-          incorrect: isCorrect ? 0 : 1,
-          accuracy: isCorrect ? 100 : 50,
-          responseTime: 4,
-          completionStatus: 'completed',
-          hintsUsed: 0,
-          retries: 0,
-          abandonment: false,
-          aiChosenDifficulty: 'Easy',
-        };
-        saveSession(state, session);
-        document.getElementById('game-modal').remove();
+        leaf.classList.add('dragging');
+        event.dataTransfer?.setData('text/plain', leaf.dataset.leafId);
+      });
+
+      leaf.addEventListener('dragend', () => {
+        leaf.classList.remove('dragging');
       });
     });
-  }
 
-  if (currentGame === 'Build the Dish') {
-    document.querySelectorAll('[data-ingredient]').forEach((button) => {
-      button.addEventListener('click', () => {
-        const ingredient = button.dataset.ingredient;
-        burgerSelection = [...(burgerSelection || []), ingredient];
-        button.classList.add('selected');
-        const order = ['Bun', 'Patty', 'Cheese', 'Lettuce', 'Tomato', 'Bun'];
-        if (burgerSelection.length === order.length) {
-          const valid = burgerSelection.every((item, index) => order[index] === item);
-          if (valid) {
-            celebrateWin('Perfect! Your burger is ready.');
+    baskets.forEach((basket) => {
+      basket.addEventListener('dragover', (event) => {
+        event.preventDefault();
+      });
+
+      basket.addEventListener('drop', (event) => {
+        event.preventDefault();
+        const leafId = event.dataTransfer?.getData('text/plain');
+        const target = basket.dataset.target;
+        const droppedLeaf = document.querySelector(`.leaf-token[data-leaf-id="${leafId}"]`);
+
+        if (!droppedLeaf || droppedLeaf.classList.contains('sorted')) return;
+
+        const leafType = droppedLeaf.dataset.leafType;
+        const isCorrect = (leafType === 'green' && target === 'good') || (leafType === 'brown' && target === 'bad');
+        if (isCorrect) {
+          droppedLeaf.classList.add('sorted');
+          droppedLeaf.setAttribute('draggable', 'false');
+          basket.appendChild(droppedLeaf);
+          basket.classList.add('correct');
+          setTimeout(() => basket.classList.remove('correct'), 400);
+          const remaining = document.querySelectorAll('.leaf-token:not(.sorted)').length;
+          if (remaining === 0) {
+            celebrateWin('Excellent! You sorted every leaf correctly.');
             const session = {
               patientId: state.currentUserId,
-              game: 'Build the Dish',
-              difficulty: 'Medium',
+              game: 'Tea Leaf Sorting',
+              difficulty: 'Easy',
               score: 10,
               correct: 1,
               incorrect: 0,
               accuracy: 100,
-              responseTime: 6,
+              responseTime: 4,
               completionStatus: 'completed',
               hintsUsed: 0,
               retries: 0,
               abandonment: false,
-              aiChosenDifficulty: 'Medium',
+              aiChosenDifficulty: 'Easy',
             };
             saveSession(state, session);
-            document.getElementById('game-modal').remove();
-          } else {
-            showToast('Almost there. Build it in the right order.');
-            burgerSelection = [];
-            document.querySelectorAll('.burger-item').forEach((item) => item.classList.remove('selected'));
-            renderGameModal();
+            setTimeout(() => document.getElementById('game-modal')?.remove(), 500);
           }
-        } else {
-          renderGameModal();
+          return;
         }
+
+        basket.classList.add('wrong');
+        setTimeout(() => basket.classList.remove('wrong'), 300);
+        showToast('That leaf belongs in the other basket.');
       });
     });
-    document.getElementById('dish-done')?.addEventListener('click', () => {
-      if (burgerSelection.length === 6) {
-        celebrateWin('Excellent! You built the burger.');
-      } else {
-        showToast('Add the remaining layers to finish the burger.');
-      }
+
+    if (leafBank) {
+      leafBank.addEventListener('dragover', (event) => {
+        event.preventDefault();
+      });
+    }
+  }
+
+  if (currentGame === 'Build the Dish') {
+    document.querySelectorAll('.dish-letter').forEach((button) => {
+      button.addEventListener('click', () => {
+        const ingredient = button.dataset.ingredient;
+        const nextSelection = [...(burgerSelection || [])];
+        nextSelection.push(ingredient);
+        burgerSelection = nextSelection;
+        renderGameModal();
+      });
+    });
+
+    document.getElementById('dish-clear')?.addEventListener('click', () => {
+      burgerSelection = [];
+      renderGameModal();
+    });
+
+    document.getElementById('dish-remove')?.addEventListener('click', () => {
+      if (!burgerSelection || burgerSelection.length === 0) return;
+      burgerSelection = burgerSelection.slice(0, -1);
+      renderGameModal();
     });
   }
 
