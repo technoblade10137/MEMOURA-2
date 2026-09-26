@@ -259,6 +259,8 @@ input[type="radio"], input[type="checkbox"] { width: auto; }
 
 .game-modal.sandwich-game .modal-card.sandwich-modal-card {
   width: min(1000px, 96vw);
+  max-height: 90vh;
+  overflow-y: auto;
   background: linear-gradient(180deg, #fff1e2, #fffaf5);
   border-radius: 28px;
   box-shadow: 0 16px 40px rgba(91, 62, 42, 0.18);
@@ -269,6 +271,10 @@ input[type="radio"], input[type="checkbox"] { width: auto; }
   display: flex;
   flex-direction: column;
   gap: 18px;
+  max-height: 78vh;
+  overflow-y: auto;
+  padding-right: 4px;
+  -webkit-overflow-scrolling: touch;
 }
 
 .sandwich-topbar {
@@ -528,19 +534,19 @@ input[type="radio"], input[type="checkbox"] { width: auto; }
     grid-template-columns: 1fr;
   }
   .ingredient-bank {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
-    overflow-x: auto;
-    overflow-y: hidden;
-    padding-bottom: 6px;
-    grid-template-columns: none;
+    max-height: 210px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 4px;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: thin;
   }
   .ingredient-card {
-    flex: 0 0 84px;
-    width: 84px;
-    min-width: 84px;
+    width: 100%;
+    min-width: 0;
     min-height: 88px;
     padding: 8px 6px;
     font-size: 0.68rem;
@@ -608,20 +614,20 @@ input[type="radio"], input[type="checkbox"] { width: auto; }
   }
 
   .ingredient-bank {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
-    overflow-x: auto;
-    overflow-y: hidden;
-    padding-bottom: 6px;
-    grid-template-columns: none;
+    max-height: 180px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 4px;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: thin;
   }
 
   .ingredient-card {
-    flex: 0 0 82px;
-    width: 82px;
-    min-width: 82px;
+    width: 100%;
+    min-width: 0;
     min-height: 88px;
     padding: 8px 6px;
     font-size: 0.68rem;
