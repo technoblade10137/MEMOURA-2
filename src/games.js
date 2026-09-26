@@ -8,7 +8,7 @@ export const GAME_LIBRARY = {
     category: ['Places', 'Food', 'Locations', 'Mixed'],
   },
   tea: { name: 'Tea Leaf Sorting', difficulty: ['Easy', 'Medium', 'Hard'] },
-  dish: { name: 'Build the Dish', difficulty: ['Easy', 'Medium', 'Hard'] },
+  dish: { name: 'Make My Sandwich', difficulty: ['Easy', 'Medium', 'Hard'] },
   sequence: { name: 'Sequence Recall', difficulty: ['Easy', 'Medium', 'Hard'] },
   ludo: { name: 'Ludo', difficulty: ['Easy', 'Medium', 'Hard'] },
 };
@@ -46,7 +46,7 @@ export function getDishChallenge(favoriteFoods = []) {
   const defaultList = ['Khar', 'Pitha'];
   const choices = favoriteFoods.length ? favoriteFoods : defaultList;
   return {
-    title: 'Build the Dish',
+    title: 'Make My Sandwich',
     ingredients: choices,
     answer: choices[0],
   };

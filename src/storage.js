@@ -87,7 +87,7 @@ export function getDefaultState() {
     },
     stageOptions: defaultStageOptions,
     stateOptions: defaultStateOptions,
-    allGames: ['Memory Jigsaw', 'Memory Recall', 'Tea Leaf Sorting', 'Build the Dish', 'Sequence Recall', 'Ludo'],
+    allGames: ['Memory Jigsaw', 'Memory Recall', 'Tea Leaf Sorting', 'Make My Sandwich', 'Sequence Recall', 'Ludo'],
     gamePreferences: {
       meal: 'Khar',
       place: 'River path',
@@ -100,6 +100,43 @@ export function getDefaultState() {
   };
 }
 
+function sanitizeStoredState(parsed) {
+  const defaults = getDefaultState();
+  const safe = { ...defaults, ...parsed };
+  const defaultPatient = defaults.patients[0];
+  const defaultCaregiver = defaults.caregivers[0];
+
+  const testNamePatterns = ['test user', 'testuser', 'demo user', 'guest'];
+  const isTestUser = (value) => typeof value === 'string' && testNamePatterns.some((pattern) => value.toLowerCase().includes(pattern));
+
+  const cleanedPatients = Array.isArray(parsed?.patients) && parsed.patients.length ? parsed.patients : defaults.patients;
+  const cleanedCaregivers = Array.isArray(parsed?.caregivers) && parsed.caregivers.length ? parsed.caregivers : defaults.caregivers;
+
+  safe.patients = cleanedPatients.filter((patient) => patient && patient.name && !isTestUser(patient.name));
+  safe.caregivers = cleanedCaregivers.filter((caregiver) => caregiver && caregiver.name && !isTestUser(caregiver.name));
+
+  if (!safe.patients.length) safe.patients = defaults.patients;
+  if (!safe.caregivers.length) safe.caregivers = defaults.caregivers;
+
+  const currentPatientExists = safe.patients.some((patient) => patient.id === safe.currentUserId);
+  const currentCaregiverExists = safe.caregivers.some((caregiver) => caregiver.id === safe.currentUserId);
+
+  if (!safe.currentUserId || (!currentPatientExists && !currentCaregiverExists)) {
+    safe.currentRole = 'patient';
+    safe.currentUserId = defaultPatient.id;
+  }
+
+  if (safe.currentRole === 'patient' && !safe.patients.some((patient) => patient.id === safe.currentUserId)) {
+    safe.currentUserId = defaultPatient.id;
+  }
+
+  if (safe.currentRole === 'caregiver' && !safe.caregivers.some((caregiver) => caregiver.id === safe.currentUserId)) {
+    safe.currentUserId = defaultCaregiver.id;
+  }
+
+  return safe;
+}
+
 export function loadStore() {
   const saved = localStorage.getItem(STORAGE_KEY);
   if (!saved) {
@@ -109,7 +146,9 @@ export function loadStore() {
   }
   try {
     const parsed = JSON.parse(saved);
-    return { ...getDefaultState(), ...parsed, patients: parsed.patients || getDefaultState().patients, caregivers: parsed.caregivers || getDefaultState().caregivers, routines: parsed.routines || getDefaultState().routines, reminders: parsed.reminders || getDefaultState().reminders, moods: parsed.moods || getDefaultState().moods, sessions: parsed.sessions || getDefaultState().sessions, images: parsed.images || getDefaultState().images, rooms: parsed.rooms || getDefaultState().rooms };
+    const safeState = sanitizeStoredState(parsed);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(safeState));
+    return safeState;
   } catch (error) {
     console.error('Failed to load state', error);
     const initial = getDefaultState();

@@ -23,6 +23,22 @@ let currentRecallIndex = 0;
 let sequenceState = { pattern: [], currentStep: 0, completed: false };
 let jigsawState = { placed: [], draggedPiece: null };
 let burgerSelection = [];
+let sandwichGameState = {
+  difficulty: 'Easy',
+  target: [],
+  selection: [],
+  feedback: 'Look carefully and remember the sandwich order.',
+  previewing: true,
+  viewingTime: 8000,
+  hintsUsed: 0,
+  maxHints: 3,
+  hintedIngredient: null,
+  score: 0,
+  completed: false,
+  consecutiveWins: 0,
+  consecutiveMistakes: 0,
+  round: 1,
+};
 let ludoState = { dice: 1, tokens: [0,0,0,0], ai: [0,0,0], turn: 'player' };
 let teaMusicSession = null;
 const ingredientArt = {
@@ -537,7 +553,7 @@ function renderGameHub(patient) {
         <button class="card-button" data-game-select="Memory Jigsaw">Memory Jigsaw</button>
         <button class="card-button" data-game-select="Memory Recall">Memory Recall</button>
         <button class="card-button" data-game-select="Tea Leaf Sorting">Tea Leaf Sorting</button>
-        <button class="card-button" data-game-select="Build the Dish">Build the Dish</button>
+        <button class="card-button" data-game-select="Make My Sandwich">Make My Sandwich</button>
         <button class="card-button" data-game-select="Sequence Recall">Sequence Recall</button>
         <button class="card-button" data-game-select="Ludo">Ludo</button>
       </div>
@@ -930,10 +946,81 @@ function buildMemoryRecallSceneList(patientId) {
   return scenes.slice(0, 5);
 }
 
+function getSandwichIngredientOptions() {
+  return [
+    { name: 'Bread', emoji: '🍞', color: '#d3a672', short: 'B' },
+    { name: 'Lettuce', emoji: '🥬', color: '#94c76e', short: 'L' },
+    { name: 'Tomato', emoji: '🍅', color: '#df6765', short: 'T' },
+    { name: 'Cheese', emoji: '🧀', color: '#f1d170', short: 'C' },
+    { name: 'Cucumber', emoji: '🥒', color: '#7bc69a', short: 'U' },
+    { name: 'Egg', emoji: '🥚', color: '#f7d1a0', short: 'E' },
+    { name: 'Turkey', emoji: '🍗', color: '#c98b5b', short: 'K' },
+    { name: 'Jam', emoji: '🍓', color: '#d68ab4', short: 'J' },
+  ];
+}
+
+function getSandwichDifficultyConfig(level = sandwichGameState.difficulty) {
+  const configMap = {
+    Easy: { ingredients: 3, viewingTime: 8500, hints: 3 },
+    Medium: { ingredients: 4, viewingTime: 6500, hints: 2 },
+    Hard: { ingredients: 5, viewingTime: 5000, hints: 1 },
+  };
+  return configMap[level] || configMap.Easy;
+}
+
+function buildTargetSandwich(level = sandwichGameState.difficulty) {
+  const options = getSandwichIngredientOptions();
+  const config = getSandwichDifficultyConfig(level);
+  const chosen = [];
+  const seen = new Set();
+
+  while (chosen.length < config.ingredients) {
+    const pick = options[Math.floor(Math.random() * options.length)];
+    if (seen.has(pick.name)) continue;
+    seen.add(pick.name);
+    chosen.push(pick.name);
+  }
+
+  return chosen;
+}
+
 function openGameModal(name) {
-  currentGame = name;
+  currentGame = name === 'Build the Dish' ? 'Make My Sandwich' : name;
   jigsawState = { placed: [], draggedPiece: null };
   burgerSelection = [];
+
+  if (currentGame === 'Make My Sandwich') {
+    sandwichGameState = {
+      difficulty: 'Easy',
+      target: buildTargetSandwich('Easy'),
+      selection: [],
+      feedback: 'Look closely and remember the sandwich order.',
+      previewing: true,
+      viewingTime: 8500,
+      hintsUsed: 0,
+      maxHints: 3,
+      hintedIngredient: null,
+      score: 0,
+      completed: false,
+      consecutiveWins: 0,
+      consecutiveMistakes: 0,
+      round: 1,
+    };
+    const config = getSandwichDifficultyConfig(sandwichGameState.difficulty);
+    sandwichGameState.target = buildTargetSandwich(sandwichGameState.difficulty);
+    sandwichGameState.viewingTime = config.viewingTime;
+    sandwichGameState.maxHints = config.hints;
+    renderGameModal();
+    setTimeout(() => {
+      if (currentGame === 'Make My Sandwich') {
+        sandwichGameState.previewing = false;
+        sandwichGameState.feedback = 'Now build it from memory.';
+        renderGameModal();
+      }
+    }, sandwichGameState.viewingTime);
+    return;
+  }
+
   if (name === 'Memory Recall') {
     const patientId = state.currentUserId || state.patients[0]?.id;
     const questions = buildMemoryRecallSceneList(patientId);
@@ -960,18 +1047,18 @@ function renderGameModal() {
   const existing = document.getElementById('game-modal');
   if (existing) existing.remove();
   const modal = document.createElement('div');
-  modal.className = `game-modal show ${currentGame === 'Build the Dish' ? 'build-the-dish' : ''}`.trim();
+  modal.className = `game-modal show ${currentGame === 'Make My Sandwich' ? 'sandwich-game' : ''}`.trim();
   modal.id = 'game-modal';
   modal.innerHTML = `
-    <div class="modal-card ${currentGame === 'Build the Dish' ? 'build-the-dish-card' : ''}">
-      <div class="topbar game-modal-header ${currentGame === 'Build the Dish' ? 'hidden' : ''}">
+    <div class="modal-card ${currentGame === 'Make My Sandwich' ? 'sandwich-modal-card' : ''}">
+      <div class="topbar game-modal-header ${currentGame === 'Make My Sandwich' ? 'hidden' : ''}">
         <h3>${currentGame}</h3>
         <button class="danger-btn" data-game-close="exit">${t('exit', state)}</button>
       </div>
       ${currentGame === 'Memory Recall' ? renderRecallGame() : ''}
       ${currentGame === 'Memory Jigsaw' ? renderJigsawGame() : ''}
       ${currentGame === 'Tea Leaf Sorting' ? renderTeaGame() : ''}
-      ${currentGame === 'Build the Dish' ? renderDishGame() : ''}
+      ${currentGame === 'Make My Sandwich' ? renderDishGame() : ''}
       ${currentGame === 'Sequence Recall' ? renderSequenceGame() : ''}
       ${currentGame === 'Ludo' ? renderLudoGame() : ''}
     </div>
@@ -1096,42 +1183,86 @@ function renderTeaGame() {
   `;
 }
 
-function renderDishGame() {
-  const order = ['B', 'L', 'T', 'C', 'O'];
-  const selection = burgerSelection || [];
+function renderSandwichStack(parts, includeLabel = false) {
+  const stack = parts && parts.length ? parts : ['Bread'];
+  const ingredientMap = Object.fromEntries(getSandwichIngredientOptions().map((ingredient) => [ingredient.name, ingredient]));
+
   return `
-    <div class="dish-scene">
-      <div class="dish-topbar">
-        <button class="dish-back-btn" type="button">Back</button>
-        <div class="dish-timer">15s</div>
-        <div class="dish-level">
-          <div class="dish-level-badge">Level 2</div>
-          <div class="dish-level-count">1 of 3</div>
+    <div class="sandwich-stack ${includeLabel ? 'target-stack' : 'player-stack'}">
+      <div class="bread top-bread">🍞</div>
+      ${stack.map((part) => {
+        const item = ingredientMap[part] || { name: part, emoji: '🧩', color: '#d8d9df' };
+        return `<div class="sandwich-layer" style="background:${item.color}">${item.emoji} ${part}</div>`;
+      }).join('')}
+      <div class="bread bottom-bread">🍞</div>
+    </div>
+  `;
+}
+
+function renderDishGame() {
+  const ingredientOptions = getSandwichIngredientOptions();
+  const selection = sandwichGameState.selection || [];
+  const target = sandwichGameState.target || [];
+  const previewing = Boolean(sandwichGameState.previewing);
+  const score = sandwichGameState.score || 0;
+  const hintCount = sandwichGameState.hintsUsed || 0;
+  const availableHints = Math.max(0, (sandwichGameState.maxHints || 0) - hintCount);
+
+  return `
+    <div class="sandwich-scene">
+      <div class="sandwich-topbar">
+        <button class="sandwich-nav active" type="button" data-sandwich-action="games">GAMES</button>
+        <button class="sandwich-nav" type="button" data-sandwich-action="hints">HINTS (${availableHints})</button>
+        <button class="sandwich-nav" type="button" data-sandwich-action="routines">ROUTINES</button>
+      </div>
+
+      <div class="sandwich-status-row">
+        <div class="status-pill">Score: ${score}</div>
+        <div class="status-pill">${sandwichGameState.difficulty}</div>
+        <div class="status-pill">Round ${sandwichGameState.round}</div>
+      </div>
+
+      <div class="sandwich-panel-grid">
+        <div class="sandwich-panel ${previewing ? 'preview' : 'memory'}">
+          <div class="panel-title">Target Sandwich</div>
+          ${previewing ? renderSandwichStack(target, true) : '<div class="memory-veil">Remember the sandwich and build it.</div>'}
+        </div>
+
+        <div class="sandwich-panel assembly-panel">
+          <div class="panel-title">Sandwich Assembly</div>
+          ${renderSandwichStack(selection, false)}
         </div>
       </div>
 
-      <div class="dish-stage">
-        <div class="dish-stack" aria-label="Dish preview">
-          <div class="dish-bun bun-top"></div>
-          <div class="dish-bun bun-middle"></div>
-          <div class="dish-bun bun-bottom"></div>
+      ${sandwichGameState.completed ? `
+        <div class="sandwich-comparison">
+          <div class="compare-box">
+            <div class="panel-title">Original</div>
+            ${renderSandwichStack(target, true)}
+          </div>
+          <div class="compare-box">
+            <div class="panel-title">Your Sandwich</div>
+            ${renderSandwichStack(selection, false)}
+          </div>
         </div>
+      ` : ''}
 
-        <div class="dish-target-letters" aria-label="Target letters">
-          <div class="dish-target-letter">O</div>
-          <div class="dish-target-letter">B</div>
-          <div class="dish-target-letter">O</div>
-        </div>
+      <div class="sandwich-feedback ${sandwichGameState.feedback.includes('Great') ? 'success' : sandwichGameState.feedback.includes('Almost') ? 'warning' : ''}">
+        ${sandwichGameState.feedback}
       </div>
 
-      <div class="dish-controls">
-        <button class="dish-action dish-clear" id="dish-clear" type="button">Clear</button>
-        <button class="dish-action dish-remove" id="dish-remove" type="button"><span class="dish-remove-icon">△</span>Remove</button>
+      <div class="sandwich-controls">
+        <button class="sandwich-action secondary" type="button" data-sandwich-action="clear">Clear</button>
+        <button class="sandwich-action secondary" type="button" data-sandwich-action="remove">Remove</button>
+        ${sandwichGameState.completed ? '<button class="sandwich-action primary" type="button" data-sandwich-action="next-round">Next Round</button>' : '<button class="sandwich-action primary" type="button" data-sandwich-action="check">Check</button>'}
       </div>
 
-      <div class="dish-letter-bank">
-        ${order.map((letter) => `
-          <button class="dish-letter ${selection.includes(letter) ? 'selected' : ''}" data-ingredient="${letter}" type="button">${letter}</button>
+      <div class="ingredient-bank">
+        ${ingredientOptions.map((ingredient) => `
+          <button class="ingredient-card ${sandwichGameState.hintedIngredient === ingredient.name ? 'hinted' : ''}" data-ingredient="${ingredient.name}" type="button" ${previewing ? 'disabled' : ''}>
+            <span class="ingredient-emoji" style="background:${ingredient.color}">${ingredient.emoji}</span>
+            <span>${ingredient.name}</span>
+          </button>
         `).join('')}
       </div>
     </div>
@@ -1369,26 +1500,148 @@ function attachGameEvents() {
     }
   }
 
-  if (currentGame === 'Build the Dish') {
-    document.querySelectorAll('.dish-letter').forEach((button) => {
+  if (currentGame === 'Make My Sandwich') {
+    document.querySelectorAll('[data-sandwich-action]').forEach((button) => {
       button.addEventListener('click', () => {
-        const ingredient = button.dataset.ingredient;
-        const nextSelection = [...(burgerSelection || [])];
-        nextSelection.push(ingredient);
-        burgerSelection = nextSelection;
-        renderGameModal();
+        const action = button.dataset.sandwichAction;
+
+        if (action === 'games') {
+          renderGameHub(state.currentUserId ? state.patients.find((patient) => patient.id === state.currentUserId) || state.patients[0] : state.patients[0]);
+          return;
+        }
+
+        if (action === 'routines') {
+          const patient = state.patients.find((entry) => entry.id === state.currentUserId) || state.patients[0];
+          renderRoutineView(patient);
+          return;
+        }
+
+        if (action === 'hints') {
+          const nextNeeded = sandwichGameState.target[sandwichGameState.selection.length];
+          if (!nextNeeded) {
+            showToast('You already completed this sandwich.');
+            return;
+          }
+          if (sandwichGameState.hintsUsed >= (sandwichGameState.maxHints || 0)) {
+            showToast('No hints left for this sandwich.');
+            return;
+          }
+          sandwichGameState.hintsUsed += 1;
+          sandwichGameState.hintedIngredient = nextNeeded;
+          sandwichGameState.feedback = `Hint: the next ingredient is ${nextNeeded}.`;
+          showToast(`Hint: ${nextNeeded}`);
+          speakText(`Hint: the next ingredient is ${nextNeeded}`, state.language, state.settings.voiceOn);
+          renderGameModal();
+          return;
+        }
+
+        if (action === 'clear') {
+          sandwichGameState.selection = [];
+          sandwichGameState.feedback = 'Start again from the first ingredient.';
+          renderGameModal();
+          return;
+        }
+
+        if (action === 'remove') {
+          sandwichGameState.selection = sandwichGameState.selection.slice(0, -1);
+          sandwichGameState.feedback = 'One layer removed. Keep going.';
+          renderGameModal();
+          return;
+        }
+
+        if (action === 'next-round') {
+          sandwichGameState.round += 1;
+          sandwichGameState.completed = false;
+          sandwichGameState.selection = [];
+          sandwichGameState.hintedIngredient = null;
+          sandwichGameState.feedback = 'Watch carefully and remember the next sandwich.';
+          sandwichGameState.previewing = true;
+          const nextDifficulty = sandwichGameState.consecutiveWins >= 2 ? 'Hard' : sandwichGameState.consecutiveMistakes >= 2 ? 'Easy' : sandwichGameState.difficulty;
+          sandwichGameState.difficulty = nextDifficulty;
+          const config = getSandwichDifficultyConfig(sandwichGameState.difficulty);
+          sandwichGameState.target = buildTargetSandwich(sandwichGameState.difficulty);
+          sandwichGameState.viewingTime = config.viewingTime;
+          sandwichGameState.maxHints = config.hints;
+          sandwichGameState.hintsUsed = 0;
+          renderGameModal();
+          setTimeout(() => {
+            if (currentGame === 'Make My Sandwich') {
+              sandwichGameState.previewing = false;
+              sandwichGameState.feedback = 'Now build it from memory.';
+              renderGameModal();
+            }
+          }, sandwichGameState.viewingTime);
+          return;
+        }
+
+        if (action === 'check') {
+          if (sandwichGameState.previewing) {
+            showToast('Watch the sandwich first.');
+            return;
+          }
+          const expected = sandwichGameState.target;
+          if (sandwichGameState.selection.length < expected.length) {
+            showToast('Finish the full sandwich first.');
+            sandwichGameState.feedback = 'Finish the full sandwich first.';
+            renderGameModal();
+            return;
+          }
+          const isCorrect = sandwichGameState.selection.every((ingredient, index) => ingredient === expected[index]);
+          if (isCorrect) {
+            sandwichGameState.completed = true;
+            sandwichGameState.consecutiveWins += 1;
+            sandwichGameState.consecutiveMistakes = 0;
+            const roundScore = 120 - (sandwichGameState.hintsUsed * 15) + (sandwichGameState.difficulty === 'Hard' ? 15 : 0);
+            sandwichGameState.score += Math.max(30, roundScore);
+            sandwichGameState.feedback = 'Great! That’s right!';
+            showToast('Great! That’s right!');
+            speakText('Great! That’s right!', state.language, state.settings.voiceOn);
+            const session = {
+              patientId: state.currentUserId,
+              game: 'Make My Sandwich',
+              difficulty: sandwichGameState.difficulty,
+              score: Math.max(30, roundScore),
+              correct: sandwichGameState.target.length,
+              incorrect: 0,
+              accuracy: 100,
+              responseTime: 6,
+              completionStatus: 'completed',
+              hintsUsed: sandwichGameState.hintsUsed,
+              retries: 0,
+              abandonment: false,
+              aiChosenDifficulty: sandwichGameState.difficulty,
+            };
+            saveSession(state, session);
+            renderGameModal();
+            return;
+          }
+
+          sandwichGameState.consecutiveMistakes += 1;
+          sandwichGameState.consecutiveWins = 0;
+          sandwichGameState.feedback = 'Almost! Try again.';
+          showToast('Almost! Try again.');
+          speakText('Almost! Try again.', state.language, state.settings.voiceOn);
+          renderGameModal();
+        }
       });
     });
 
-    document.getElementById('dish-clear')?.addEventListener('click', () => {
-      burgerSelection = [];
-      renderGameModal();
-    });
+    document.querySelectorAll('.ingredient-card').forEach((button) => {
+      button.addEventListener('click', () => {
+        if (sandwichGameState.previewing) {
+          showToast('Watch the target sandwich first.');
+          return;
+        }
+        if (sandwichGameState.completed) {
+          showToast('This round is complete. Press Next Round.');
+          return;
+        }
 
-    document.getElementById('dish-remove')?.addEventListener('click', () => {
-      if (!burgerSelection || burgerSelection.length === 0) return;
-      burgerSelection = burgerSelection.slice(0, -1);
-      renderGameModal();
+        const chosen = button.dataset.ingredient;
+        sandwichGameState.selection.push(chosen);
+        sandwichGameState.feedback = 'Keep going. Finish the sandwich and then tap Check.';
+        renderGameModal();
+      });
     });
   }
 

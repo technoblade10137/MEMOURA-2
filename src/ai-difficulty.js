@@ -22,10 +22,10 @@ export function updateDifficulty(state, patientId, game, result) {
 }
 
 export function chooseDailyActivity(state, patient) {
-  const available = ['Memory Recall', 'Tea Leaf Sorting', 'Sequence Recall', 'Memory Jigsaw', 'Build the Dish'];
+  const available = ['Memory Recall', 'Tea Leaf Sorting', 'Sequence Recall', 'Memory Jigsaw', 'Make My Sandwich'];
   const recent = state.sessions.filter((item) => item.patientId === patient.id).slice(-4);
   const preferences = state.gamePreferences || {};
   if (recent.length && recent.some((item) => item.accuracy >= 80)) return 'Memory Recall';
-  if (preferences.favoriteFoods && preferences.favoriteFoods.length) return 'Build the Dish';
+  if (preferences.favoriteFoods && preferences.favoriteFoods.length) return 'Make My Sandwich';
   return available[Math.floor(Math.random() * available.length)];
 }
