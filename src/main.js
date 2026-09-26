@@ -53,7 +53,26 @@ let sandwichGameState = {
   consecutiveMistakes: 0,
   round: 1,
 };
-let ludoState = { dice: 1, tokens: [0,0,0,0], ai: [0,0,0], turn: 'player' };
+let ludoState = {
+  players: [
+    { id: 'human', name: 'You', color: 'red', isHuman: true, tokens: [{ progress: -1 }, { progress: -1 }, { progress: -1 }, { progress: -1 }] },
+    { id: 'ai-green', name: 'AI Green', color: 'green', isHuman: false, tokens: [{ progress: -1 }, { progress: -1 }, { progress: -1 }, { progress: -1 }] },
+    { id: 'ai-yellow', name: 'AI Yellow', color: 'yellow', isHuman: false, tokens: [{ progress: -1 }, { progress: -1 }, { progress: -1 }, { progress: -1 }] },
+    { id: 'ai-blue', name: 'AI Blue', color: 'blue', isHuman: false, tokens: [{ progress: -1 }, { progress: -1 }, { progress: -1 }, { progress: -1 }] },
+  ],
+  currentTurn: 0,
+  dice: 1,
+  lastRoll: null,
+  legalMoves: [],
+  soundOn: true,
+  score: 0,
+  turns: 0,
+  gameOver: false,
+  winner: null,
+  message: 'Your turn. Roll the dice!',
+  aiRunning: false,
+  rolling: false,
+};
 let teaMusicSession = null;
 const ingredientArt = {
   Bun: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=600&q=80',
@@ -1067,6 +1086,9 @@ function openGameModal(name) {
   if (name === 'Tea Leaf Sorting') {
     playTeaSortingMusic();
   }
+  if (name === 'Ludo') {
+    initializeLudoGame();
+  }
   renderGameModal();
 }
 
@@ -1459,24 +1481,348 @@ function renderSequenceGame() {
   `;
 }
 
+const LUDO_PATH = [
+  [6, 1], [6, 2], [6, 3], [6, 4], [5, 4], [4, 4], [3, 4], [2, 4], [1, 4], [1, 5], [1, 6], [1, 7], [1, 8],
+  [2, 8], [3, 8], [4, 8], [5, 8], [6, 8], [6, 9], [6, 10], [6, 11], [6, 12], [7, 12], [8, 12], [9, 12], [10, 12],
+  [10, 11], [10, 10], [10, 9], [10, 8], [11, 8], [12, 8], [13, 8], [13, 7], [13, 6], [13, 5], [13, 4], [12, 4],
+  [11, 4], [10, 4], [10, 3], [10, 2], [10, 1], [9, 1], [8, 1], [7, 1], [7, 2], [7, 3], [7, 4], [7, 5], [7, 6], [7, 7], [7, 8]
+];
+const LUDO_START_OFFSETS = { red: 0, green: 13, yellow: 26, blue: 39 };
+const LUDO_SAFE_POSITIONS = new Set([
+  '6,1', '6,8', '6,12', '10,8', '13,8', '13,4', '10,4', '7,1', '7,8', '7,12', '7,4', '10,12', '1,4', '13,6'
+]);
+const LUDO_HOME_ZONES = {
+  red: [[1, 1], [1, 2], [2, 1], [2, 2]],
+  green: [[1, 12], [1, 13], [2, 12], [2, 13]],
+  yellow: [[12, 1], [12, 2], [13, 1], [13, 2]],
+  blue: [[12, 12], [12, 13], [13, 12], [13, 13]],
+};
+const LUDO_HOME_LANES = {
+  red: [[6, 7], [6, 8], [6, 9], [6, 10], [6, 11], [6, 12]],
+  green: [[7, 8], [8, 8], [9, 8], [10, 8], [11, 8], [12, 8]],
+  yellow: [[8, 6], [8, 7], [8, 8], [8, 9], [8, 10], [8, 11]],
+  blue: [[7, 6], [7, 7], [7, 8], [7, 9], [7, 10], [7, 11]],
+};
+const LUDO_CENTER = [7, 7];
+
+function getLudoTokenKey(player, tokenIndex) {
+  return `${player.color}-${tokenIndex}`;
+}
+
+function getLudoTokenPosition(player, tokenIndex) {
+  const token = player.tokens[tokenIndex];
+  const progress = token.progress;
+  if (progress === -1) {
+    return LUDO_HOME_ZONES[player.color][tokenIndex];
+  }
+  if (progress < 52) {
+    const boardIndex = (LUDO_START_OFFSETS[player.color] + progress) % LUDO_PATH.length;
+    return LUDO_PATH[boardIndex];
+  }
+  if (progress < 58) {
+    return LUDO_HOME_LANES[player.color][progress - 52] || LUDO_CENTER;
+  }
+  return LUDO_CENTER;
+}
+
+function getLudoBoardKey(position) {
+  return `${position[0]},${position[1]}`;
+}
+
+function getLudoPlayerByIndex(index) {
+  return ludoState.players[index];
+}
+
+function getLudoReadablePlayerTurn() {
+  const player = getLudoPlayerByIndex(ludoState.currentTurn);
+  return player ? player.isHuman ? 'Your turn' : `${player.name}'s turn` : 'Game ready';
+}
+
+function cloneLudoState() {
+  return JSON.parse(JSON.stringify(ludoState));
+}
+
+function getLudoLegalMoves(player, roll) {
+  const moves = [];
+  player.tokens.forEach((token, tokenIndex) => {
+    if (token.progress >= 57) return;
+    if (token.progress === -1) {
+      if (roll === 6) {
+        moves.push({ tokenIndex, from: -1, to: 0, start: true });
+      }
+      return;
+    }
+    const nextProgress = token.progress + roll;
+    if (nextProgress <= 57) {
+      moves.push({ tokenIndex, from: token.progress, to: nextProgress, start: false });
+    }
+  });
+  return moves;
+}
+
+function ludoPlaySound(type) {
+  if (!ludoState.soundOn || typeof window === 'undefined') return;
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtx) return;
+  const audioCtx = new AudioCtx();
+  const oscillator = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  oscillator.type = type === 'capture' ? 'sawtooth' : type === 'win' ? 'triangle' : 'sine';
+  const frequencyMap = { roll: 220, move: 330, capture: 480, win: 620, button: 170 };
+  oscillator.frequency.value = frequencyMap[type] || 260;
+  gain.gain.value = 0.04;
+  oscillator.connect(gain).connect(audioCtx.destination);
+  oscillator.start();
+  oscillator.stop(audioCtx.currentTime + 0.18);
+  setTimeout(() => audioCtx.close(), 220);
+}
+
+function ludoCheckWinner() {
+  const winner = ludoState.players.find((player) => player.tokens.every((token) => token.progress >= 57));
+  if (!winner) return null;
+  ludoState.gameOver = true;
+  ludoState.winner = winner;
+  ludoState.message = winner.isHuman ? '🎉 YOU WIN! 🎉' : `${winner.name} wins!`;
+  ludoState.score += winner.isHuman ? 300 : 0;
+  ludoState.legalMoves = [];
+  ludoPlaySound('win');
+  return winner;
+}
+
+function ludoApplyCapture(player, tokenIndex) {
+  const playerInfo = ludoState.players[player];
+  const token = playerInfo.tokens[tokenIndex];
+  if (token.progress < 0 || token.progress >= 52) return 0;
+
+  const landingKey = getLudoBoardKey(getLudoTokenPosition(playerInfo, tokenIndex));
+  let captures = 0;
+  ludoState.players.forEach((opponent, opponentIndex) => {
+    if (opponentIndex === player) return;
+    opponent.tokens.forEach((opponentToken, opponentTokenIndex) => {
+      if (opponentToken.progress < 0 || opponentToken.progress >= 52) return;
+      const opponentKey = getLudoBoardKey(getLudoTokenPosition(opponent, opponentTokenIndex));
+      if (opponentKey === landingKey && !LUDO_SAFE_POSITIONS.has(landingKey)) {
+        opponent.tokens[opponentTokenIndex].progress = -1;
+        captures += 1;
+        ludoState.score += 50;
+        ludoPlaySound('capture');
+      }
+    });
+  });
+  return captures;
+}
+
+function executeLudoMove(playerIndex, tokenIndex, roll) {
+  const player = ludoState.players[playerIndex];
+  const token = player.tokens[tokenIndex];
+  const previousProgress = token.progress;
+  if (token.progress === -1) {
+    token.progress = 0;
+  } else {
+    token.progress += roll;
+  }
+
+  if (token.progress > 57) {
+    token.progress = 57;
+  }
+
+  const captures = ludoApplyCapture(playerIndex, tokenIndex);
+  if (captures > 0) {
+    ludoState.message = `${player.name} captured an opponent!`;
+  } else if (previousProgress === -1) {
+    ludoState.message = `${player.name} moved a token out of home.`;
+  } else if (token.progress >= 57) {
+    ludoState.message = `${player.name} brought a token home!`;
+    ludoState.score += 100;
+  } else {
+    ludoState.message = `${player.name} moved a token.`;
+    ludoState.score += 10;
+  }
+  ludoPlaySound(captures > 0 ? 'capture' : 'move');
+
+  if (token.progress >= 57) {
+    const completed = player.tokens.filter((entry) => entry.progress >= 57).length;
+    if (completed === 4) {
+      ludoCheckWinner();
+      return true;
+    }
+  }
+
+  return true;
+}
+
+function chooseLudoAiMove(player, legalMoves, roll) {
+  const strategy = player.name.includes('Green') ? 'easy' : player.name.includes('Yellow') ? 'medium' : 'hard';
+  if (strategy === 'easy') {
+    return legalMoves[Math.floor(Math.random() * legalMoves.length)];
+  }
+
+  const captureMoves = legalMoves.filter((move) => {
+    const testPlayer = JSON.parse(JSON.stringify(ludoState.players));
+    const activePlayer = testPlayer[ludoState.currentTurn];
+    const token = activePlayer.tokens[move.tokenIndex];
+    const nextProgress = token.progress === -1 ? 0 : token.progress + roll;
+    if (nextProgress >= 58) return false;
+    const landingPosition = nextProgress < 52
+      ? LUDO_PATH[(LUDO_START_OFFSETS[activePlayer.color] + nextProgress) % LUDO_PATH.length]
+      : LUDO_HOME_LANES[activePlayer.color][nextProgress - 52] || LUDO_CENTER;
+    const landingKey = getLudoBoardKey(landingPosition);
+    return ludoState.players.some((opponent, index) => {
+      if (index === ludoState.currentTurn) return false;
+      return opponent.tokens.some((opponentToken) => {
+        if (opponentToken.progress < 0 || opponentToken.progress >= 52) return false;
+        const oppKey = getLudoBoardKey(getLudoTokenPosition(opponent, opponent.tokens.indexOf(opponentToken)));
+        return oppKey === landingKey && !LUDO_SAFE_POSITIONS.has(landingKey);
+      });
+    });
+  });
+
+  if (strategy === 'medium' && captureMoves.length) {
+    return captureMoves[0];
+  }
+
+  const progressed = legalMoves.slice().sort((a, b) => {
+    const aToken = player.tokens[a.tokenIndex];
+    const bToken = player.tokens[b.tokenIndex];
+    const aProgress = aToken.progress === -1 ? 0 : aToken.progress + roll;
+    const bProgress = bToken.progress === -1 ? 0 : bToken.progress + roll;
+    return bProgress - aProgress;
+  });
+
+  if (strategy === 'hard') {
+    return progressed[0];
+  }
+
+  return progressed[0] || legalMoves[0];
+}
+
+function getLudoBoardState() {
+  const board = Array.from({ length: 15 }, () => Array.from({ length: 15 }, () => ({ type: 'empty', tokens: [] })));
+  const tokenMap = new Map();
+
+  ludoState.players.forEach((player) => {
+    player.tokens.forEach((token, tokenIndex) => {
+      const position = getLudoTokenPosition(player, tokenIndex);
+      const key = getLudoBoardKey(position);
+      if (!tokenMap.has(key)) tokenMap.set(key, []);
+      tokenMap.get(key).push({ player, tokenIndex, token });
+    });
+  });
+
+  for (let row = 0; row < 15; row += 1) {
+    for (let col = 0; col < 15; col += 1) {
+      const key = `${row},${col}`;
+      let cellType = 'empty';
+      if (row >= 1 && row <= 5 && col >= 1 && col <= 5) cellType = 'red-home';
+      if (row >= 1 && row <= 5 && col >= 9 && col <= 13) cellType = 'green-home';
+      if (row >= 9 && row <= 13 && col >= 1 && col <= 5) cellType = 'yellow-home';
+      if (row >= 9 && row <= 13 && col >= 9 && col <= 13) cellType = 'blue-home';
+      if (key === '7,7') cellType = 'center';
+      if (LUDO_PATH.some(([pathRow, pathCol]) => pathRow === row && pathCol === col)) cellType = 'path';
+      board[row][col] = { type: cellType, tokens: tokenMap.get(key) || [] };
+    }
+  }
+
+  return board;
+}
+
+function ludoAdvanceTurn() {
+  if (ludoState.gameOver) return;
+  ludoState.currentTurn = (ludoState.currentTurn + 1) % ludoState.players.length;
+  ludoState.legalMoves = [];
+  ludoState.message = ludoState.players[ludoState.currentTurn].isHuman
+    ? 'Your turn. Roll the dice!'
+    : `${ludoState.players[ludoState.currentTurn].name} is rolling...`;
+  ludoState.aiRunning = false;
+  ludoState.rolling = false;
+  renderGameModal();
+}
+
+function initializeLudoGame() {
+  ludoState = {
+    players: [
+      { id: 'human', name: 'You', color: 'red', isHuman: true, tokens: [{ progress: -1 }, { progress: -1 }, { progress: -1 }, { progress: -1 }] },
+      { id: 'ai-green', name: 'AI Green', color: 'green', isHuman: false, tokens: [{ progress: -1 }, { progress: -1 }, { progress: -1 }, { progress: -1 }] },
+      { id: 'ai-yellow', name: 'AI Yellow', color: 'yellow', isHuman: false, tokens: [{ progress: -1 }, { progress: -1 }, { progress: -1 }, { progress: -1 }] },
+      { id: 'ai-blue', name: 'AI Blue', color: 'blue', isHuman: false, tokens: [{ progress: -1 }, { progress: -1 }, { progress: -1 }, { progress: -1 }] },
+    ],
+    currentTurn: 0,
+    dice: 1,
+    lastRoll: null,
+    legalMoves: [],
+    soundOn: true,
+    score: 0,
+    turns: 0,
+    gameOver: false,
+    winner: null,
+    message: 'Your turn. Roll the dice!',
+    aiRunning: false,
+    rolling: false,
+  };
+}
+
 function renderLudoGame() {
-  const board = Array.from({ length: 49 }, (_, index) => index);
-  const playerIndex = ludoState?.tokens?.[0] ?? 0;
-  const aiIndex = ludoState?.ai?.[0] ?? 0;
-  return `
-    <div class="game-panel">
-      <button class="primary-btn" id="roll-dice">Roll dice</button>
-      <div class="ludo-status">You: ${playerIndex} • AI: ${aiIndex}</div>
-      <div class="ludo-board">
-        ${board.map((cell) => {
-          const isPlayer = cell === playerIndex;
-          const isAi = cell === aiIndex;
-          return `<div class="ludo-cell ${cell % 3 === 0 ? 'green' : cell % 3 === 1 ? 'red' : 'blue'}">
-            ${isPlayer ? '<span class="ludo-token player-token"></span>' : ''}
-            ${isAi ? '<span class="ludo-token ai-token"></span>' : ''}
-          </div>`;
-        }).join('')}
+  const board = getLudoBoardState();
+  const currentPlayer = ludoState.players[ludoState.currentTurn];
+  const humanPlayer = ludoState.players[0];
+  const humanCompleted = humanPlayer.tokens.filter((token) => token.progress >= 57).length;
+
+  const scoreboard = ludoState.players.map((player) => {
+    const completed = player.tokens.filter((token) => token.progress >= 57).length;
+    const active = player.tokens.filter((token) => token.progress >= 0 && token.progress < 57).length;
+    return `
+      <div class="ludo-player-card ${ludoState.currentTurn === ludoState.players.indexOf(player) ? 'active' : ''} ${player.color}">
+        <div class="ludo-player-header">
+          <span class="ludo-player-dot" style="background:${player.color};"></span>
+          <strong>${player.name}</strong>
+        </div>
+        <small>${completed}/4 home • ${active} active</small>
       </div>
+    `;
+  }).join('');
+
+  return `
+    <div class="game-panel ludo-panel">
+      <div class="ludo-topbar">
+        <div>
+          <div class="ludo-title">LUDO</div>
+          <div class="ludo-turn">Player Turn: ${currentPlayer.isHuman ? 'You' : currentPlayer.name}</div>
+        </div>
+        <div class="ludo-score-box">Score: ${ludoState.score}</div>
+      </div>
+
+      <div class="ludo-header-strip">
+        <div class="ludo-status-box">${ludoState.message}</div>
+        <div class="ludo-dice-box">Dice: ${ludoState.lastRoll || '—'}</div>
+      </div>
+
+      <div class="ludo-player-strip">${scoreboard}</div>
+
+      <div class="ludo-board-shell">
+        <div class="ludo-board">
+          ${board.map((row, rowIndex) => row.map((cell, colIndex) => {
+            const isPath = cell.type === 'path';
+            const cellTokens = cell.tokens || [];
+            const tokenMarkup = cellTokens.map(({ player, tokenIndex }) => {
+              const isMovable = ludoState.legalMoves.includes(tokenIndex) && player.id === 'human' && ludoState.currentTurn === 0;
+              const isCurrent = isMovable && !ludoState.gameOver;
+              return `<button class="ludo-token token-${player.color} ${isCurrent ? 'movable' : ''}" data-player-index="${ludoState.players.indexOf(player)}" data-token-index="${tokenIndex}" type="button" ${isCurrent ? '' : 'disabled'}>${tokenIndex + 1}</button>`;
+            }).join('');
+            return `<div class="ludo-cell ${cell.type} ${isPath ? 'ludo-path' : ''}">${tokenMarkup}</div>`;
+          }).join('')).join('')}
+        </div>
+      </div>
+
+      <div class="ludo-control-row">
+        <button class="ludo-dice-button ${ludoState.rolling ? 'is-rolling' : ''}" id="roll-dice" type="button" ${!ludoState.gameOver && ludoState.currentTurn === 0 && !ludoState.rolling ? '' : 'disabled'}>
+          <span class="ludo-die-face">${ludoState.lastRoll || '🎲'}</span>
+          <span class="ludo-die-label">${ludoState.currentTurn === 0 ? 'Roll' : 'Wait'}</span>
+        </button>
+        <button class="small-btn" id="ludo-sound-toggle" type="button">${ludoState.soundOn ? 'Sound On' : 'Sound Off'}</button>
+        <button class="small-btn" id="ludo-restart" type="button">Restart</button>
+      </div>
+
+      <div class="ludo-hud">Your tokens home: ${humanCompleted}/4</div>
     </div>
   `;
 }
@@ -1936,34 +2282,125 @@ function attachGameEvents() {
   }
 
   if (currentGame === 'Ludo') {
-    document.getElementById('roll-dice').addEventListener('click', () => {
+    const currentPlayer = ludoState.players[ludoState.currentTurn];
+
+    if (!currentPlayer.isHuman && !ludoState.gameOver && !ludoState.aiRunning) {
+      ludoState.aiRunning = true;
+      ludoState.message = `${currentPlayer.name} is rolling...`;
+      setTimeout(() => {
+        const value = Math.floor(Math.random() * 6) + 1;
+        ludoState.lastRoll = value;
+        ludoState.dice = value;
+        ludoPlaySound('roll');
+
+        const legalMoves = getLudoLegalMoves(currentPlayer, value);
+        if (!legalMoves.length) {
+          ludoState.message = `${currentPlayer.name} had no legal move.`;
+          setTimeout(() => {
+            ludoState.aiRunning = false;
+            ludoAdvanceTurn();
+          }, 900);
+          renderGameModal();
+          return;
+        }
+
+        const chosenMove = chooseLudoAiMove(currentPlayer, legalMoves, value);
+        executeLudoMove(ludoState.currentTurn, chosenMove.tokenIndex, value);
+        ludoState.legalMoves = [];
+        renderGameModal();
+
+        setTimeout(() => {
+          if (ludoState.gameOver) return;
+          if (value === 6) {
+            ludoState.message = `${currentPlayer.name} rolled a 6 and gets another turn.`;
+            ludoState.aiRunning = false;
+            renderGameModal();
+            return;
+          }
+          ludoState.aiRunning = false;
+          ludoAdvanceTurn();
+        }, 900);
+      }, 700);
+    }
+
+    const rollButton = document.getElementById('roll-dice');
+    rollButton?.addEventListener('click', () => {
+      if (!ludoState.players[0].isHuman || ludoState.currentTurn !== 0 || ludoState.rolling || ludoState.gameOver) return;
+      ludoState.rolling = true;
       const value = Math.floor(Math.random() * 6) + 1;
+      ludoState.lastRoll = value;
       ludoState.dice = value;
-      const move = Math.min((ludoState.tokens[0] || 0) + value, 48);
-      ludoState.tokens[0] = move;
-      const aiMove = Math.min((ludoState.ai[0] || 0) + (Math.floor(Math.random() * 6) + 1), 48);
-      ludoState.ai[0] = aiMove;
-      showToast(`Dice: ${value}. Your token moved to ${move}`);
+      ludoPlaySound('roll');
+      const legalMoves = getLudoLegalMoves(ludoState.players[0], value);
+      ludoState.legalMoves = legalMoves.map((entry) => entry.tokenIndex);
+
+      if (!legalMoves.length) {
+        ludoState.message = 'No legal moves. Turn passes.';
+        ludoState.rolling = false;
+        renderGameModal();
+        setTimeout(() => {
+          if (!ludoState.gameOver) {
+            ludoAdvanceTurn();
+          }
+        }, 700);
+        return;
+      }
+
+      ludoState.message = `You rolled ${value}. Choose a token to move.`;
+      ludoState.rolling = false;
       renderGameModal();
-      if (move >= 48 || aiMove >= 48) {
-        celebrateWin(move >= 48 ? 'You won the match!' : 'The AI reached the finish first.');
+    });
+
+    document.getElementById('ludo-sound-toggle')?.addEventListener('click', () => {
+      ludoState.soundOn = !ludoState.soundOn;
+      renderGameModal();
+    });
+
+    document.getElementById('ludo-restart')?.addEventListener('click', () => {
+      initializeLudoGame();
+      renderGameModal();
+    });
+
+    document.querySelectorAll('.ludo-token.movable').forEach((tokenButton) => {
+      tokenButton.addEventListener('click', () => {
+        const playerIndex = Number(tokenButton.dataset.playerIndex);
+        const tokenIndex = Number(tokenButton.dataset.tokenIndex);
+        if (playerIndex !== 0 || ludoState.currentTurn !== 0 || ludoState.gameOver) return;
+        const rollValue = ludoState.lastRoll || 1;
+        const success = executeLudoMove(playerIndex, tokenIndex, rollValue);
+        if (!success) return;
+
+        if (ludoState.gameOver) {
+          renderGameModal();
+          return;
+        }
+
+        if (rollValue === 6) {
+          ludoState.message = 'You rolled a 6! Take another turn.';
+          ludoState.legalMoves = [];
+          renderGameModal();
+          return;
+        }
+
+        ludoState.legalMoves = [];
         const session = {
           patientId: state.currentUserId,
           game: 'Ludo',
           difficulty: 'Medium',
-          score: move >= 48 ? 10 : 5,
-          correct: move >= 48 ? 1 : 0,
-          incorrect: move >= 48 ? 0 : 1,
-          accuracy: move >= 48 ? 100 : 50,
+          score: ludoState.score,
+          correct: ludoState.players[0].tokens.filter((token) => token.progress >= 57).length,
+          incorrect: 0,
+          accuracy: 100,
           responseTime: 6,
-          completionStatus: 'completed',
+          completionStatus: ludoState.gameOver ? 'completed' : 'attempted',
           hintsUsed: 0,
           retries: 0,
           abandonment: false,
           aiChosenDifficulty: 'Medium',
         };
         saveSession(state, session);
-      }
+        ludoAdvanceTurn();
+      });
     });
   }
 }
