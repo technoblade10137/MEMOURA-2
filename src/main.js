@@ -1545,7 +1545,7 @@ function getLudoLegalMoves(player, roll) {
   player.tokens.forEach((token, tokenIndex) => {
     if (token.progress >= 57) return;
     if (token.progress === -1) {
-      if (roll === 6) {
+      if (roll === 1 || roll === 6) {
         moves.push({ tokenIndex, from: -1, to: 0, start: true });
       }
       return;
@@ -1780,47 +1780,51 @@ function renderLudoGame() {
   }).join('');
 
   return `
-    <div class="game-panel ludo-panel">
+    <div class="game-panel ludo-panel traditional-ludo-panel">
       <div class="ludo-topbar">
         <div>
-          <div class="ludo-title">LUDO</div>
-          <div class="ludo-turn">Player Turn: ${currentPlayer.isHuman ? 'You' : currentPlayer.name}</div>
+          <div class="ludo-title">Memory Ludo</div>
+          <div class="ludo-turn">${currentPlayer.isHuman ? 'Your Turn' : `${currentPlayer.name}'s Turn`}</div>
         </div>
         <div class="ludo-score-box">Score: ${ludoState.score}</div>
       </div>
 
-      <div class="ludo-header-strip">
-        <div class="ludo-status-box">${ludoState.message}</div>
-        <div class="ludo-dice-box">Dice: ${ludoState.lastRoll || '—'}</div>
-      </div>
-
-      <div class="ludo-player-strip">${scoreboard}</div>
-
-      <div class="ludo-board-shell">
-        <div class="ludo-board">
-          ${board.map((row, rowIndex) => row.map((cell, colIndex) => {
-            const isPath = cell.type === 'path';
-            const cellTokens = cell.tokens || [];
-            const tokenMarkup = cellTokens.map(({ player, tokenIndex }) => {
-              const isMovable = ludoState.legalMoves.includes(tokenIndex) && player.id === 'human' && ludoState.currentTurn === 0;
-              const isCurrent = isMovable && !ludoState.gameOver;
-              return `<button class="ludo-token token-${player.color} ${isCurrent ? 'movable' : ''}" data-player-index="${ludoState.players.indexOf(player)}" data-token-index="${tokenIndex}" type="button" ${isCurrent ? '' : 'disabled'}>${tokenIndex + 1}</button>`;
-            }).join('');
-            return `<div class="ludo-cell ${cell.type} ${isPath ? 'ludo-path' : ''}">${tokenMarkup}</div>`;
-          }).join('')).join('')}
+      <div class="ludo-main-layout">
+        <div class="ludo-board-shell">
+          <div class="ludo-board traditional-board">
+            ${board.map((row, rowIndex) => row.map((cell, colIndex) => {
+              const isPath = cell.type === 'path';
+              const cellTokens = cell.tokens || [];
+              const tokenMarkup = cellTokens.map(({ player, tokenIndex }) => {
+                const isMovable = ludoState.legalMoves.includes(tokenIndex) && player.id === 'human' && ludoState.currentTurn === 0;
+                const isCurrent = isMovable && !ludoState.gameOver;
+                return `<button class="ludo-token token-${player.color} ${isCurrent ? 'movable' : ''}" data-player-index="${ludoState.players.indexOf(player)}" data-token-index="${tokenIndex}" type="button" ${isCurrent ? '' : 'disabled'}>${tokenIndex + 1}</button>`;
+              }).join('');
+              return `<div class="ludo-cell ${cell.type} ${isPath ? 'ludo-path' : ''}">${tokenMarkup}</div>`;
+            }).join('')).join('')}
+          </div>
         </div>
-      </div>
 
-      <div class="ludo-control-row">
-        <button class="ludo-dice-button ${ludoState.rolling ? 'is-rolling' : ''}" id="roll-dice" type="button" ${!ludoState.gameOver && ludoState.currentTurn === 0 && !ludoState.rolling ? '' : 'disabled'}>
-          <span class="ludo-die-face">${ludoState.lastRoll || '🎲'}</span>
-          <span class="ludo-die-label">${ludoState.currentTurn === 0 ? 'Roll' : 'Wait'}</span>
-        </button>
-        <button class="small-btn" id="ludo-sound-toggle" type="button">${ludoState.soundOn ? 'Sound On' : 'Sound Off'}</button>
-        <button class="small-btn" id="ludo-restart" type="button">Restart</button>
-      </div>
+        <aside class="ludo-side-panel">
+          <div class="ludo-status-box">${ludoState.message}</div>
+          <div class="ludo-dice-box">Dice: ${ludoState.lastRoll || '—'}</div>
 
-      <div class="ludo-hud">Your tokens home: ${humanCompleted}/4</div>
+          <div class="ludo-dice-wrap">
+            <button class="ludo-dice-button ${ludoState.rolling ? 'is-rolling' : ''}" id="roll-dice" type="button" ${!ludoState.gameOver && ludoState.currentTurn === 0 && !ludoState.rolling ? '' : 'disabled'}>
+              <span class="ludo-die-face">${ludoState.lastRoll || '🎲'}</span>
+              <span class="ludo-die-label">${ludoState.currentTurn === 0 ? 'Roll' : 'Wait'}</span>
+            </button>
+          </div>
+
+          <div class="ludo-mini-controls">
+            <button class="small-btn" id="ludo-sound-toggle" type="button">${ludoState.soundOn ? 'Sound On' : 'Sound Off'}</button>
+            <button class="small-btn" id="ludo-restart" type="button">Restart</button>
+          </div>
+
+          <div class="ludo-player-strip">${scoreboard}</div>
+          <div class="ludo-hud">Your tokens home: ${humanCompleted}/4</div>
+        </aside>
+      </div>
     </div>
   `;
 }
