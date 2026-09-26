@@ -380,7 +380,6 @@ function renderPatientDashboard(patient) {
           </div>
         </div>
         <div class="card-grid">
-          <button class="card-button" data-action="quick-sandwich">Make My Sandwich</button>
           <button class="card-button" data-action="open-game-hub">${t('games', state)}</button>
           <button class="card-button" data-action="open-routine">${t('routine', state)}</button>
           <button class="card-button" data-action="open-reminders">${t('reminders', state)}</button>
@@ -551,7 +550,6 @@ function attachPatientEvents(patient) {
   document.querySelector('[data-action="start-game"]').addEventListener('click', () => {
     openGameModal(document.querySelector('[data-action="start-game"]').dataset.game || 'Memory Recall');
   });
-  document.querySelector('[data-action="quick-sandwich"]').addEventListener('click', () => openGameModal('Make My Sandwich'));
   document.querySelector('[data-action="open-game-hub"]').addEventListener('click', () => renderGameHub(patient));
   document.querySelector('[data-action="open-routine"]').addEventListener('click', () => renderRoutineView(patient));
   document.querySelector('[data-action="open-reminders"]').addEventListener('click', () => renderReminderView(patient));
