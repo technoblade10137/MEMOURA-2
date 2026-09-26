@@ -12,6 +12,7 @@ import { toggleLocationSharing, addRoom } from './maps.js';
 import { saveSession } from './sessions.js';
 import { chooseDailyActivity, updateDifficulty } from './ai-difficulty.js';
 import { getRecallQuestion, getDishChallenge, getSequencePattern } from './games.js';
+import { createSequenceRound, evaluateSequence } from './sequence-game.js';
 import { generateReport, getAiInsights } from './reports.js';
 
 let app = null;
@@ -20,7 +21,20 @@ let currentGame = null;
 let activeQuestion = null;
 let currentRecallQuestions = [];
 let currentRecallIndex = 0;
-let sequenceState = { pattern: [], currentStep: 0, completed: false };
+let sequenceState = {
+  phase: 'intro',
+  level: 1,
+  cards: [],
+  pattern: [],
+  recallCards: [],
+  selection: [],
+  memorizeTime: 7000,
+  countdown: 0,
+  startedAt: 0,
+  result: null,
+  bestScore: 0,
+  loopId: null,
+};
 let jigsawState = { placed: [], draggedPiece: null };
 let burgerSelection = [];
 let sandwichGameState = {
@@ -1033,9 +1047,20 @@ function openGameModal(name) {
     return;
   }
   if (name === 'Sequence Recall') {
-    sequenceState.pattern = ['Tea cup', 'Leaf', 'Bell', 'Garden'];
-    sequenceState.currentStep = 0;
-    sequenceState.completed = false;
+    sequenceState = {
+      ...sequenceState,
+      phase: 'intro',
+      level: Math.min(5, Math.max(1, sequenceState.level || 1)),
+      cards: [],
+      pattern: [],
+      recallCards: [],
+      selection: [],
+      memorizeTime: 7000,
+      countdown: 0,
+      startedAt: 0,
+      result: null,
+      loopId: null,
+    };
     renderGameModal();
     return;
   }
@@ -1272,19 +1297,157 @@ function renderDishGame() {
   `;
 }
 
+function getSequenceCardById(cardId) {
+  return sequenceState.cards.find((card) => card.key === cardId) || null;
+}
+
+function startSequenceRound() {
+  const round = createSequenceRound(sequenceState.level);
+  sequenceState.cards = round.cards;
+  sequenceState.pattern = round.pattern;
+  sequenceState.recallCards = round.recallCards;
+  sequenceState.selection = [];
+  sequenceState.phase = 'memorize';
+  sequenceState.memorizeTime = round.config.memorizeMs;
+  sequenceState.countdown = Math.ceil(round.config.memorizeMs / 1000);
+  sequenceState.startedAt = Date.now();
+  sequenceState.result = null;
+
+  if (sequenceState.loopId) {
+    clearInterval(sequenceState.loopId);
+  }
+
+  sequenceState.loopId = setInterval(() => {
+    if (sequenceState.phase !== 'memorize') return;
+    const elapsed = Date.now() - sequenceState.startedAt;
+    const remaining = Math.max(0, sequenceState.memorizeTime - elapsed);
+    sequenceState.countdown = Math.ceil(remaining / 1000);
+
+    if (remaining <= 0) {
+      sequenceState.phase = 'recall';
+      clearInterval(sequenceState.loopId);
+      sequenceState.loopId = null;
+      renderGameModal();
+    }
+  }, 200);
+
+  renderGameModal();
+}
+
 function renderSequenceGame() {
-  const objects = ['Tea cup', 'Leaf', 'Bell', 'Garden'];
-  const pattern = sequenceState.pattern.length ? sequenceState.pattern : objects;
+  if (sequenceState.phase === 'intro') {
+    return `
+      <div class="game-panel sequence-panel">
+        <div class="sequence-banner">
+          <span class="sequence-badge">Memory game</span>
+          <h3>Memory Sequence</h3>
+        </div>
+        <p class="prompt-text">Remember the cards in the exact order shown.</p>
+        <div class="sequence-demo-grid">
+          ${['☀️', '🌿', '⭐', '🔔'].slice(0, Math.min(4, sequenceState.level || 1)).map((symbol) => `<div class="sequence-demo-card">${symbol}</div>`).join('')}
+        </div>
+        <button class="primary-btn" id="start-sequence" type="button">Start Game</button>
+      </div>
+    `;
+  }
+
+  if (sequenceState.phase === 'memorize') {
+    return `
+      <div class="game-panel sequence-panel">
+        <div class="sequence-header">
+          <strong>Level ${sequenceState.level}</strong>
+          <span class="countdown-pill">${sequenceState.countdown}s</span>
+        </div>
+        <p class="prompt-text">Watch carefully. Remember the cards in order.</p>
+        <div class="sequence-card-row">
+          ${sequenceState.cards.map((card) => `
+            <div class="sequence-memory-card" type="button">
+              <span class="sequence-card-icon">${card.label}</span>
+              <small>${card.name}</small>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  if (sequenceState.phase === 'result') {
+    const result = sequenceState.result || { score: 0, correct: 0, timeTaken: 0, accuracy: 0 };
+    const playerSequence = sequenceState.selection.map((cardId) => getSequenceCardById(cardId)?.label || '?').join(' • ') || 'No cards selected';
+    const correctSequence = sequenceState.pattern.map((cardId) => getSequenceCardById(cardId)?.label || '?').join(' • ');
+
+    return `
+      <div class="game-panel sequence-panel">
+        <div class="sequence-banner">
+          <span class="sequence-badge ${result.isCorrect ? 'success' : ''}">${result.isCorrect ? 'Excellent!' : 'Good try!'}</span>
+          <h3>${result.isCorrect ? 'Excellent memory!' : 'Good try! Let’s try again.'}</h3>
+        </div>
+        <div class="sequence-result-grid">
+          <div class="sequence-result-card">
+            <strong>Score</strong>
+            <div class="sequence-score-value">${result.score}</div>
+          </div>
+          <div class="sequence-result-card">
+            <strong>Time</strong>
+            <div class="sequence-score-value">${result.timeTaken.toFixed(1)}s</div>
+          </div>
+        </div>
+        <div class="sequence-result-card">
+          <strong>Your sequence</strong>
+          <p>${playerSequence}</p>
+        </div>
+        <div class="sequence-result-card">
+          <strong>Correct sequence</strong>
+          <p>${correctSequence}</p>
+        </div>
+        <div class="sequence-result-card">
+          <strong>Result</strong>
+          <p>${result.correct} / ${sequenceState.pattern.length} correct • ${result.accuracy}% accuracy</p>
+        </div>
+        <div class="sequence-buttons">
+          <button class="primary-btn" type="button" data-sequence-action="next-round">Next Round</button>
+        </div>
+      </div>
+    `;
+  }
+
+  const canSubmit = sequenceState.selection.length === sequenceState.pattern.length;
+  const selectedCards = sequenceState.selection.length
+    ? sequenceState.selection.map((cardId, index) => {
+        const card = getSequenceCardById(cardId);
+        return `
+          <div class="sequence-answer-item">
+            <span class="sequence-answer-number">${index + 1}</span>
+            <span>${card ? card.label : '?'}</span>
+          </div>
+        `;
+      }).join('')
+    : '<span class="sequence-empty">Your answer will show here</span>';
+
   return `
-    <div class="game-panel">
-      <p class="prompt-text">Watch the objects and then repeat them in order.</p>
-      <div class="object-sequence">
-        ${pattern.map((item) => `<span class="sequence-object">${item}</span>`).join('')}
+    <div class="game-panel sequence-panel">
+      <div class="sequence-header">
+        <strong>Level ${sequenceState.level}</strong>
+        <span class="sequence-best">Best: ${sequenceState.bestScore}</span>
       </div>
-      <div class="tile-grid object-grid" style="grid-template-columns: repeat(2, minmax(0, 1fr));">
-        ${objects.map((item) => `<button class="tile sequence-tile" data-tile="${item}">${item}</button>`).join('')}
+      <p class="prompt-text">Select the cards in the same order you saw them.</p>
+      <div class="sequence-answer-track">${selectedCards}</div>
+      <div class="sequence-buttons">
+        <button class="small-btn" type="button" data-sequence-action="undo">Undo</button>
+        <button class="small-btn" type="button" data-sequence-action="reset">Reset</button>
+        <button class="primary-btn" type="button" data-sequence-action="submit" ${canSubmit ? '' : 'disabled'}>Submit Answer</button>
       </div>
-      <button class="primary-btn" id="start-sequence">Start sequence</button>
+      <div class="sequence-card-grid">
+        ${sequenceState.recallCards.map((card) => {
+          const isSelected = sequenceState.selection.includes(card.key);
+          return `
+            <button class="sequence-choice-card ${isSelected ? 'selected' : ''}" type="button" data-sequence-card="${card.key}" ${isSelected ? 'disabled' : ''}>
+              <span class="sequence-card-icon">${card.label}</span>
+              <small>${card.name}</small>
+            </button>
+          `;
+        }).join('')}
+      </div>
     </div>
   `;
 }
@@ -1347,6 +1510,10 @@ function attachGameEvents() {
     const modal = document.getElementById('game-modal');
     modal.remove();
     currentGame = null;
+    if (sequenceState.loopId) {
+      clearInterval(sequenceState.loopId);
+      sequenceState.loopId = null;
+    }
     if (teaMusicSession) {
       stopTeaSortingMusic();
     }
@@ -1682,47 +1849,82 @@ function attachGameEvents() {
   }
 
   if (currentGame === 'Sequence Recall') {
-    document.getElementById('start-sequence').addEventListener('click', () => {
-      const items = ['Tea cup', 'Leaf', 'Bell', 'Garden'];
-      sequenceState.pattern = [...items];
-      sequenceState.currentStep = 0;
-      document.querySelectorAll('.sequence-tile').forEach((tile) => {
-        tile.classList.remove('active');
-      });
-      showToast('Watch and then repeat the order.');
+    document.getElementById('start-sequence')?.addEventListener('click', () => {
+      startSequenceRound();
+      showToast('Watch the cards and remember the order.');
     });
 
-    document.querySelectorAll('.sequence-tile').forEach((tile) => {
-      tile.addEventListener('click', () => {
-        const expected = sequenceState.pattern[sequenceState.currentStep];
-        const actual = tile.dataset.tile;
-        if (actual === expected) {
-          sequenceState.currentStep += 1;
-          tile.classList.add('active');
-          if (sequenceState.currentStep === sequenceState.pattern.length) {
-            celebrateWin('Excellent! You remembered the object order.');
-            const session = {
-              patientId: state.currentUserId,
-              game: 'Sequence Recall',
-              difficulty: 'Easy',
-              score: 10,
-              correct: 1,
-              incorrect: 0,
-              accuracy: 100,
-              responseTime: 5,
-              completionStatus: 'completed',
-              hintsUsed: 0,
-              retries: 0,
-              abandonment: false,
-              aiChosenDifficulty: 'Easy',
-            };
-            saveSession(state, session);
-            document.getElementById('game-modal').remove();
-          }
-        } else {
-          showToast('That was not the right object. Try the order again.');
-        }
+    document.querySelectorAll('[data-sequence-card]').forEach((button) => {
+      button.addEventListener('click', () => {
+        if (sequenceState.phase !== 'recall') return;
+
+        const cardId = button.dataset.sequenceCard;
+        if (!cardId || sequenceState.selection.includes(cardId)) return;
+        if (sequenceState.selection.length >= sequenceState.pattern.length) return;
+
+        sequenceState.selection.push(cardId);
+        renderGameModal();
       });
+    });
+
+    document.querySelector('[data-sequence-action="undo"]')?.addEventListener('click', () => {
+      sequenceState.selection = sequenceState.selection.slice(0, -1);
+      renderGameModal();
+    });
+
+    document.querySelector('[data-sequence-action="reset"]')?.addEventListener('click', () => {
+      sequenceState.selection = [];
+      renderGameModal();
+    });
+
+    document.querySelector('[data-sequence-action="submit"]')?.addEventListener('click', () => {
+      if (sequenceState.selection.length !== sequenceState.pattern.length) {
+        showToast('Select all cards before submitting.');
+        return;
+      }
+
+      const timeTaken = (Date.now() - sequenceState.startedAt) / 1000;
+      const result = evaluateSequence(sequenceState.pattern, sequenceState.selection, timeTaken);
+      const isCorrect = result.isCorrect;
+      sequenceState.bestScore = Math.max(sequenceState.bestScore, result.score);
+      sequenceState.result = {
+        ...result,
+        timeTaken,
+        isCorrect,
+      };
+      sequenceState.phase = 'result';
+
+      if (isCorrect) {
+        sequenceState.level = Math.min(5, sequenceState.level + 1);
+        celebrateWin('Excellent memory!');
+      } else {
+        showToast('Good try! Let’s try again.');
+      }
+
+      const session = {
+        patientId: state.currentUserId,
+        game: 'Sequence Recall',
+        difficulty: `Level ${sequenceState.level}`,
+        score: result.score,
+        correct: result.correct,
+        incorrect: sequenceState.pattern.length - result.correct,
+        accuracy: result.accuracy,
+        responseTime: Number(timeTaken.toFixed(1)),
+        completionStatus: isCorrect ? 'completed' : 'attempted',
+        hintsUsed: 0,
+        retries: 0,
+        abandonment: false,
+        aiChosenDifficulty: `Level ${sequenceState.level}`,
+      };
+      saveSession(state, session);
+      renderGameModal();
+    });
+
+    document.querySelector('[data-sequence-action="next-round"]')?.addEventListener('click', () => {
+      if (sequenceState.result?.isCorrect) {
+        sequenceState.level = Math.min(5, sequenceState.level + 1);
+      }
+      startSequenceRound();
     });
   }
 
