@@ -45,7 +45,7 @@ export function createSequenceRound(level = 1) {
     key: `${card.id}-${Math.random().toString(16).slice(2, 8)}`,
   }));
 
-  const pattern = shuffleItems(roundCards).map((card) => card.key);
+  const pattern = roundCards.map((card) => card.key);
 
   return {
     level,

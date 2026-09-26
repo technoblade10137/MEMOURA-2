@@ -9,12 +9,13 @@ test('level config expands from 4 cards to 8 cards', () => {
   assert.equal(getSequenceLevelConfig(5).cards, 8);
 });
 
-test('each round uses a clean random set of unique cards', () => {
+test('each round uses a clean random set of unique cards and preserves the shown memorization order', () => {
   const round = createSequenceRound(3);
   assert.equal(round.cards.length, 6);
   assert.equal(new Set(round.cards.map((card) => card.key)).size, round.cards.length);
   assert.equal(round.pattern.length, round.cards.length);
-  assert.ok(round.pattern.every((id) => round.cards.some((card) => card.key === id)));
+  assert.deepEqual(round.pattern, round.cards.map((card) => card.key));
+  assert.ok(round.recallCards.every((card) => round.cards.some((original) => original.key === card.key)));
 });
 
 test('sequence evaluation counts correctly remembered positions', () => {
