@@ -347,6 +347,7 @@ function renderPatientDashboard(patient) {
           </div>
         </div>
         <div class="card-grid">
+          <button class="card-button" data-action="quick-sandwich">Make My Sandwich</button>
           <button class="card-button" data-action="open-game-hub">${t('games', state)}</button>
           <button class="card-button" data-action="open-routine">${t('routine', state)}</button>
           <button class="card-button" data-action="open-reminders">${t('reminders', state)}</button>
@@ -517,6 +518,7 @@ function attachPatientEvents(patient) {
   document.querySelector('[data-action="start-game"]').addEventListener('click', () => {
     openGameModal(document.querySelector('[data-action="start-game"]').dataset.game || 'Memory Recall');
   });
+  document.querySelector('[data-action="quick-sandwich"]').addEventListener('click', () => openGameModal('Make My Sandwich'));
   document.querySelector('[data-action="open-game-hub"]').addEventListener('click', () => renderGameHub(patient));
   document.querySelector('[data-action="open-routine"]').addEventListener('click', () => renderRoutineView(patient));
   document.querySelector('[data-action="open-reminders"]').addEventListener('click', () => renderReminderView(patient));
@@ -1257,6 +1259,7 @@ function renderDishGame() {
         ${sandwichGameState.completed ? '<button class="sandwich-action primary" type="button" data-sandwich-action="next-round">Next Round</button>' : '<button class="sandwich-action primary" type="button" data-sandwich-action="check">Check</button>'}
       </div>
 
+      <div class="ingredient-bank-hint">Swipe for more ingredients →</div>
       <div class="ingredient-bank">
         ${ingredientOptions.map((ingredient) => `
           <button class="ingredient-card ${sandwichGameState.hintedIngredient === ingredient.name ? 'hinted' : ''}" data-ingredient="${ingredient.name}" type="button" ${previewing ? 'disabled' : ''}>
@@ -1306,6 +1309,37 @@ function renderLudoGame() {
       </div>
     </div>
   `;
+}
+
+function setupIngredientBankSwipe() {
+  const bank = document.querySelector('.ingredient-bank');
+  if (!bank) return;
+
+  let isDragging = false;
+  let startX = 0;
+  let startScrollLeft = 0;
+
+  bank.addEventListener('pointerdown', (event) => {
+    isDragging = true;
+    startX = event.clientX;
+    startScrollLeft = bank.scrollLeft;
+    bank.classList.add('dragging');
+  });
+
+  bank.addEventListener('pointermove', (event) => {
+    if (!isDragging) return;
+    const delta = event.clientX - startX;
+    bank.scrollLeft = startScrollLeft - delta;
+  });
+
+  const stopDragging = () => {
+    isDragging = false;
+    bank.classList.remove('dragging');
+  };
+
+  bank.addEventListener('pointerup', stopDragging);
+  bank.addEventListener('pointerleave', stopDragging);
+  bank.addEventListener('pointercancel', stopDragging);
 }
 
 function attachGameEvents() {
@@ -1501,6 +1535,8 @@ function attachGameEvents() {
   }
 
   if (currentGame === 'Make My Sandwich') {
+    setupIngredientBankSwipe();
+
     document.querySelectorAll('[data-sandwich-action]').forEach((button) => {
       button.addEventListener('click', () => {
         const action = button.dataset.sandwichAction;

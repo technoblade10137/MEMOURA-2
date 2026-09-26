@@ -426,10 +426,41 @@ input[type="radio"], input[type="checkbox"] { width: auto; }
   color: #5f3f36;
 }
 
+.ingredient-bank-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  text-align: center;
+  font-size: 0.72rem;
+  color: #8a5d50;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.9;
+  background: rgba(255, 244, 219, 0.7);
+  border: 1px solid rgba(228, 174, 98, 0.45);
+  border-radius: 999px;
+  padding: 6px 10px;
+}
+
+.ingredient-bank-hint::before {
+  content: '↔';
+  font-size: 1rem;
+  color: #b76a38;
+}
+
 .ingredient-bank {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
+  touch-action: pan-x;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.ingredient-bank.dragging {
+  cursor: grabbing;
 }
 
 .ingredient-card {
@@ -490,23 +521,46 @@ input[type="radio"], input[type="checkbox"] { width: auto; }
   .dish-back-btn, .dish-level-box, .dish-timer { justify-self: center; }
   .dish-action { font-size: 1.5rem; height: 62px; }
   .dish-letter { width: 58px; height: 58px; font-size: 2.1rem; }
-  .sandwich-panel-grid, .sandwich-comparison, .ingredient-bank, .sandwich-controls {
+  .sandwich-panel-grid, .sandwich-comparison, .sandwich-controls {
     grid-template-columns: 1fr;
   }
   .sandwich-topbar {
     grid-template-columns: 1fr;
   }
+  .ingredient-bank {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 6px;
+    grid-template-columns: none;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+  .ingredient-card {
+    flex: 0 0 84px;
+    width: 84px;
+    min-width: 84px;
+    min-height: 88px;
+    padding: 8px 6px;
+    font-size: 0.68rem;
+  }
+  .ingredient-emoji {
+    width: 30px;
+    height: 30px;
+    font-size: 1.15rem;
+  }
 }
 
 @media (max-width: 480px) {
   .game-modal.sandwich-game .modal-card.sandwich-modal-card {
-    width: min(96vw, 100%);
-    padding: 10px 10px 12px;
-    border-radius: 18px;
+    width: min(94vw, 100%);
+    padding: 8px 8px 10px;
+    border-radius: 16px;
   }
 
   .sandwich-scene {
-    gap: 10px;
+    gap: 8px;
   }
 
   .sandwich-topbar {
@@ -515,14 +569,14 @@ input[type="radio"], input[type="checkbox"] { width: auto; }
   }
 
   .sandwich-nav {
-    padding: 8px 6px;
-    font-size: 0.7rem;
+    padding: 8px 5px;
+    font-size: 0.68rem;
     letter-spacing: 0.02em;
   }
 
   .status-pill {
-    padding: 7px 10px;
-    font-size: 0.76rem;
+    padding: 6px 8px;
+    font-size: 0.72rem;
   }
 
   .sandwich-panel {
@@ -560,6 +614,7 @@ input[type="radio"], input[type="checkbox"] { width: auto; }
     overflow-y: hidden;
     padding-bottom: 6px;
     grid-template-columns: none;
+    -webkit-overflow-scrolling: touch;
     scrollbar-width: thin;
   }
 
@@ -580,12 +635,13 @@ input[type="radio"], input[type="checkbox"] { width: auto; }
 
   .sandwich-action {
     padding: 10px 8px;
-    font-size: 0.78rem;
+    font-size: 0.76rem;
+    min-height: 42px;
   }
 
   .sandwich-feedback {
-    font-size: 0.9rem;
-    padding: 10px 12px;
+    font-size: 0.84rem;
+    padding: 8px 10px;
   }
 
   .leaf-basket {
