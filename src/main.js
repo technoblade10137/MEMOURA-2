@@ -1309,8 +1309,8 @@ function startSequenceRound() {
   sequenceState.selection = [];
   sequenceState.phase = 'memorize';
   sequenceState.memorizeTime = round.config.memorizeMs;
-  sequenceState.countdown = Math.ceil(round.config.memorizeMs / 1000);
   sequenceState.startedAt = Date.now();
+  sequenceState.countdown = Math.ceil(round.config.memorizeMs / 1000);
   sequenceState.result = null;
 
   if (sequenceState.loopId) {
@@ -1319,12 +1319,19 @@ function startSequenceRound() {
 
   sequenceState.loopId = setInterval(() => {
     if (sequenceState.phase !== 'memorize') return;
+
     const elapsed = Date.now() - sequenceState.startedAt;
     const remaining = Math.max(0, sequenceState.memorizeTime - elapsed);
-    sequenceState.countdown = Math.ceil(remaining / 1000);
+    const nextCountdown = Math.ceil(remaining / 1000);
+
+    if (nextCountdown !== sequenceState.countdown) {
+      sequenceState.countdown = nextCountdown;
+      renderGameModal();
+    }
 
     if (remaining <= 0) {
       sequenceState.phase = 'recall';
+      sequenceState.countdown = 0;
       clearInterval(sequenceState.loopId);
       sequenceState.loopId = null;
       renderGameModal();
