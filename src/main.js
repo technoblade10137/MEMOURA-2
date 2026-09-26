@@ -1584,6 +1584,11 @@ function ludoCheckWinner() {
   ludoState.score += winner.isHuman ? 300 : 0;
   ludoState.legalMoves = [];
   ludoPlaySound('win');
+  if (winner.isHuman) {
+    celebrateWin('Amazing! You won the game!');
+  } else {
+    showToast(`${winner.name} wins!`);
+  }
   return winner;
 }
 
@@ -2152,8 +2157,7 @@ function attachGameEvents() {
             const roundScore = 120 - (sandwichGameState.hintsUsed * 15) + (sandwichGameState.difficulty === 'Hard' ? 15 : 0);
             sandwichGameState.score += Math.max(30, roundScore);
             sandwichGameState.feedback = 'Great! That’s right!';
-            showToast('Great! That’s right!');
-            speakText('Great! That’s right!', state.language, state.settings.voiceOn);
+            celebrateWin('Fantastic! You made the sandwich perfectly!');
             const session = {
               patientId: state.currentUserId,
               game: 'Make My Sandwich',
