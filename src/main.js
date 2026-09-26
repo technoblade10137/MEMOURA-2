@@ -21,7 +21,7 @@ let activeQuestion = null;
 let currentRecallQuestions = [];
 let currentRecallIndex = 0;
 let sequenceState = { pattern: [], currentStep: 0, completed: false };
-let jigsawState = { placed: [] };
+let jigsawState = { placed: [], draggedPiece: null };
 let burgerSelection = [];
 let ludoState = { dice: 1, tokens: [0,0,0,0], ai: [0,0,0], turn: 'player' };
 const ingredientArt = {
@@ -810,7 +810,7 @@ function getRecentMood(patientId) {
 
 function openGameModal(name) {
   currentGame = name;
-  jigsawState = { placed: [] };
+  jigsawState = { placed: [], draggedPiece: null };
   burgerSelection = [];
   if (name === 'Memory Recall') {
     const questions = [
@@ -874,26 +874,48 @@ function renderRecallGame() {
   `;
 }
 
+function getJigsawPiecePosition(pieceId) {
+  const positions = {
+    1: '0% 0%',
+    2: '50% 0%',
+    3: '100% 0%',
+    4: '0% 100%',
+    5: '50% 100%',
+    6: '100% 100%',
+  };
+  return positions[pieceId] || '0% 0%';
+}
+
 function renderJigsawGame() {
   const image = state.images[0]?.src || 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=800&q=80';
-  const pieces = [1, 2, 3, 4];
+  const pieces = [1, 2, 3, 4, 5, 6];
+  const shuffledPieces = [...pieces].sort(() => Math.random() - 0.5);
   const placed = jigsawState.placed || [];
   return `
     <div class="game-panel">
       <div class="jigsaw-preview">
+        <strong>Reference image</strong>
         <img src="${image}" alt="Puzzle preview" />
       </div>
-      <div class="jigsaw-board" style="grid-template-columns: repeat(2, minmax(0, 1fr));">
+      <div class="jigsaw-board" style="grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0;">
         ${pieces.map((piece) => `
-          <div class="puzzle-slot" data-slot="${piece}">
-            ${placed.includes(piece) ? `<div class="puzzle-piece placed" data-piece="${piece}" style="background-image:url('${image}'); background-position:${piece === 1 ? '0% 0%' : piece === 2 ? '100% 0%' : piece === 3 ? '0% 100%' : '100% 100%'}"></div>` : '<span>Place here</span>'}
+          <div class="puzzle-slot ${placed.includes(piece) ? 'filled' : ''} piece-${piece}" data-slot="${piece}">
+            ${placed.includes(piece) ? `<div class="puzzle-piece piece-${piece} placed" data-piece="${piece}" style="background-image:url('${image}'); background-size:300% 200%; background-repeat:no-repeat; background-position:${getJigsawPiecePosition(piece)}"></div>` : `<span>Drop piece ${piece}</span>`}
           </div>
         `).join('')}
       </div>
-      <div class="jigsaw-piece-bank">
-        ${pieces.map((piece) => `<button class="jigsaw-piece-card" data-jigsaw-piece="${piece}" style="background-image:url('${image}'); background-position:${piece === 1 ? '0% 0%' : piece === 2 ? '100% 0%' : piece === 3 ? '0% 100%' : '100% 100%'}"></button>`).join('')}
+      <div class="jigsaw-piece-bank" style="grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;">
+        ${shuffledPieces.map((piece) => `
+          <button
+            class="jigsaw-piece-card ${placed.includes(piece) ? 'placed' : ''} piece-${piece}"
+            draggable="${placed.includes(piece) ? 'false' : 'true'}"
+            data-jigsaw-piece="${piece}"
+            style="background-image:url('${image}'); background-size:300% 200%; background-repeat:no-repeat; background-position:${getJigsawPiecePosition(piece)}; border-radius: 10px;"
+            ${placed.includes(piece) ? 'disabled' : ''}
+          ></button>
+        `).join('')}
       </div>
-      <p id="jigsaw-status">Arrange the picture in the right order.</p>
+      <p id="jigsaw-status">Drag each piece into the matching frame to rebuild the picture.</p>
     </div>
   `;
 }
@@ -1029,40 +1051,65 @@ function attachGameEvents() {
 
   if (currentGame === 'Memory Jigsaw') {
     document.querySelectorAll('.jigsaw-piece-card').forEach((piece) => {
-      piece.addEventListener('click', () => {
+      piece.addEventListener('dragstart', (event) => {
         const pieceId = Number(piece.dataset.jigsawPiece);
-        const nextSlot = (jigsawState.placed?.length || 0) + 1;
-        if (jigsawState.placed.includes(pieceId)) return;
-        jigsawState.placed = [...(jigsawState.placed || []), pieceId];
-        const correct = pieceId === nextSlot;
-        if (correct) {
-          showToast('Great placement!');
-          if (jigsawState.placed.length === 4) {
-            celebrateWin('Excellent! You completed the picture.');
-            const session = {
-              patientId: state.currentUserId,
-              game: 'Memory Jigsaw',
-              difficulty: 'Easy',
-              score: 10,
-              correct: 1,
-              incorrect: 0,
-              accuracy: 100,
-              responseTime: 3,
-              completionStatus: 'completed',
-              hintsUsed: 0,
-              retries: 0,
-              abandonment: false,
-              aiChosenDifficulty: 'Easy',
-            };
-            saveSession(state, session);
-            setTimeout(() => document.getElementById('game-modal')?.remove(), 500);
-          } else {
-            renderGameModal();
-          }
-        } else {
-          showToast('This piece belongs elsewhere. Try again.');
-          jigsawState.placed = (jigsawState.placed || []).filter((item) => item !== pieceId);
+        if (jigsawState.placed.includes(pieceId)) {
+          event.preventDefault();
+          return;
         }
+        jigsawState.draggedPiece = pieceId;
+        event.dataTransfer?.setData('text/plain', String(pieceId));
+        piece.classList.add('dragging');
+      });
+
+      piece.addEventListener('dragend', () => {
+        piece.classList.remove('dragging');
+        jigsawState.draggedPiece = null;
+      });
+    });
+
+    document.querySelectorAll('.puzzle-slot').forEach((slot) => {
+      slot.addEventListener('dragover', (event) => {
+        event.preventDefault();
+      });
+
+      slot.addEventListener('drop', (event) => {
+        event.preventDefault();
+        const slotId = Number(slot.dataset.slot);
+        const pieceId = Number(event.dataTransfer?.getData('text/plain') || jigsawState.draggedPiece || 0);
+        if (!pieceId || jigsawState.placed.includes(pieceId)) return;
+
+        if (pieceId !== slotId) {
+          showToast('That piece belongs in a different spot. Try again.');
+          return;
+        }
+
+        jigsawState.placed = [...(jigsawState.placed || []), pieceId];
+        showToast('Great placement!');
+
+        if (jigsawState.placed.length === 6) {
+          celebrateWin('Excellent! You completed the picture.');
+          const session = {
+            patientId: state.currentUserId,
+            game: 'Memory Jigsaw',
+            difficulty: 'Easy',
+            score: 10,
+            correct: 1,
+            incorrect: 0,
+            accuracy: 100,
+            responseTime: 3,
+            completionStatus: 'completed',
+            hintsUsed: 0,
+            retries: 0,
+            abandonment: false,
+            aiChosenDifficulty: 'Easy',
+          };
+          saveSession(state, session);
+          setTimeout(() => document.getElementById('game-modal')?.remove(), 500);
+          return;
+        }
+
+        renderGameModal();
       });
     });
   }
