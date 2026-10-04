@@ -18,8 +18,8 @@ MEMOURA is a mobile-first Progressive Web App prototype for memory games, routin
 - Choose a patient role or caregiver role on the welcome screen.
 - Patient registration creates a patient profile.
 - Caregiver registration links to the same patient in the shared local data store.
-- Caregiver can add reminders, routines, and upload a jigsaw image.
-- Patient can choose a mood, view activities, and play games.
+- Caregiver can add reminders, routines, upload a jigsaw image, and add or remove photos with two-sentence descriptions in the patient's Album.
+- Patient can choose a mood, view activities, play games, and flip through the caregiver-curated Album.
 - Session results are saved and influence the next activity difficulty.
 - Everything runs from browser localStorage, so the patient and caregiver share the same local store.
 

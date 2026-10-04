@@ -8,7 +8,7 @@ import { speakText } from './tts.js';
 import { showToast, requestNotificationPermission } from './notifications.js';
 import { addReminder, updateReminderStatus } from './reminders.js';
 import { addRoutine, getRoutineForPatient, isRoutineComplete, toggleRoutineCompletion } from './routines.js';
-import { addJigsawImage, addMemoryRecallImage } from './images.js';
+import { addAlbumPhoto, addJigsawImage, addMemoryRecallImage, removeAlbumPhoto, updateAlbumPhotoDescription } from './images.js';
 import { toggleLocationSharing, addRoom } from './maps.js';
 import { saveSession } from './sessions.js';
 import { chooseDailyActivity, updateDifficulty } from './ai-difficulty.js';
@@ -397,6 +397,7 @@ function renderPatientDashboard(patient) {
         </div>
         <div class="card-grid">
           <button class="card-button" data-action="open-game-hub">${t('games', state)}</button>
+          <button class="card-button album-entry-card" data-action="open-album"><span class="album-card-icon" aria-hidden="true">▱</span><span><strong>Album</strong><small>Look through your photos</small></span></button>
           <button class="card-button" data-action="open-routine">${t('routine', state)}</button>
           <button class="card-button" data-action="open-reminders">${t('reminders', state)}</button>
           <button class="card-button" data-action="open-map">${t('map', state)}</button>
@@ -426,6 +427,139 @@ function renderPatientDashboard(patient) {
   if (reminder) {
     speakText(reminder.title || 'Time to move gently', state.language, state.settings.voiceOn);
   }
+}
+
+function renderAlbumView(patient, firstPhotoIndex = 0, turnDirection = '') {
+  const photos = state.images.filter((image) => image.patientId === patient.id && image.type === 'album');
+  const lastPhotoIndex = Math.max(0, Math.ceil(photos.length / 4) * 4 - 4);
+  const pageIndex = Math.min(Math.max(firstPhotoIndex, 0), lastPhotoIndex);
+  const spread = photos.slice(pageIndex, pageIndex + 4);
+  const renderPhoto = (photo, position) => {
+    if (!photo) return '<div class="album-photo-placeholder" aria-hidden="true"></div>';
+    const description = photo.description || 'A special memory to enjoy. Take your time and remember this moment.';
+    return `
+      <figure class="album-photo-frame album-photo-position-${position}">
+        <div class="album-photo-mat"><img src="${photo.src}" alt="${escapeHtml(photo.title)}" /></div>
+        <figcaption class="album-caption">${escapeHtml(photo.title)}</figcaption>
+        <div class="album-description">${description.split(/(?<=[.!?])\s+/).map((sentence) => `<span>${escapeHtml(sentence)}</span>`).join('')}</div>
+      </figure>
+    `;
+  };
+  const renderPage = (pagePhotos, side) => {
+    const direction = side === 'left' ? 'previous' : 'next';
+    const canTurn = side === 'left' ? pageIndex > 0 : pageIndex < lastPhotoIndex;
+    return `
+    <div class="album-page album-page-${side}" data-album-page="${direction}" role="button" tabindex="${canTurn ? '0' : '-1'}" aria-disabled="${!canTurn}" aria-label="Drag to flip to ${direction} pages">
+      <div class="album-page-photos">
+        ${renderPhoto(pagePhotos[0], 'top')}
+        ${renderPhoto(pagePhotos[1], 'bottom')}
+      </div>
+    </div>
+  `;
+  };
+  const visiblePageStart = photos.length ? pageIndex + 1 : 0;
+  const visiblePageEnd = Math.min(pageIndex + 4, photos.length);
+
+  app.innerHTML = `
+    <div class="app-shell">
+      <div class="topbar">
+        <div class="brand-wrap">
+          <img src="logo.jpeg" alt="MEMOURA logo" class="brand-mark" />
+          <div class="brand">MEMOURA</div>
+        </div>
+        <div class="actions">
+          <button class="small-btn" data-action="album-home">Home</button>
+          <button class="small-btn" data-action="settings">Settings</button>
+        </div>
+      </div>
+      <div class="screen album-screen">
+        <div class="album-heading">
+          <h1>${escapeHtml(patient.name)}'s Album</h1>
+          <p>Take your time and enjoy looking through your photos.</p>
+        </div>
+        <div class="album-book ${turnDirection ? `is-turning-${turnDirection}` : ''}" aria-label="Open photo album">
+          ${renderPage(spread.slice(0, 2), 'left')}
+          <div class="album-spine" aria-hidden="true"></div>
+          ${renderPage(spread.slice(2, 4), 'right')}
+        </div>
+        <div class="album-controls">
+          <button class="ghost-btn" type="button" data-album-control="previous" ${pageIndex === 0 || !photos.length ? 'disabled' : ''}>Previous</button>
+          <p aria-live="polite">${photos.length ? `Photos ${visiblePageStart}–${visiblePageEnd} of ${photos.length}` : 'No photos yet'}</p>
+          <button class="primary-btn" type="button" data-album-control="next" ${pageIndex >= lastPhotoIndex || !photos.length ? 'disabled' : ''}>Next</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.querySelector('[data-action="album-home"]').addEventListener('click', () => renderPatientDashboard(patient));
+  document.querySelector('[data-action="settings"]').addEventListener('click', () => openSettingsModal());
+  const turnAlbumPage = (direction) => {
+    const nextIndex = direction === 'next' ? pageIndex + 4 : pageIndex - 4;
+    renderAlbumView(patient, nextIndex, direction);
+  };
+  document.querySelectorAll('[data-album-control]').forEach((button) => {
+    button.addEventListener('click', () => turnAlbumPage(button.dataset.albumControl));
+  });
+  document.querySelectorAll('[data-album-page]').forEach((page) => {
+    if (page.getAttribute('aria-disabled') === 'true') return;
+    const direction = page.dataset.albumPage;
+    const forward = direction === 'next';
+    let gesture = null;
+
+    page.addEventListener('pointerdown', (event) => {
+      if (!event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0)) return;
+      gesture = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        width: page.getBoundingClientRect().width,
+        dragging: false,
+      };
+      page.setPointerCapture(event.pointerId);
+    });
+
+    page.addEventListener('pointermove', (event) => {
+      if (!gesture || event.pointerId !== gesture.pointerId) return;
+      const deltaX = event.clientX - gesture.startX;
+      const deltaY = event.clientY - gesture.startY;
+      if (!gesture.dragging && Math.abs(deltaX) > 6 && Math.abs(deltaX) > Math.abs(deltaY)) {
+        gesture.dragging = true;
+        page.classList.add('is-dragging');
+      }
+      if (!gesture.dragging) return;
+      event.preventDefault();
+      const turnDistance = forward ? Math.min(0, deltaX) : Math.max(0, deltaX);
+      const angle = Math.max(-155, Math.min(155, turnDistance / gesture.width * 155));
+      page.style.setProperty('--album-page-angle', `${angle}deg`);
+    });
+
+    const finishGesture = (event, cancelled = false) => {
+      if (!gesture || event.pointerId !== gesture.pointerId) return;
+      const { startX, dragging, width } = gesture;
+      const deltaX = event.clientX - startX;
+      const shouldTurn = !cancelled && dragging && (forward ? deltaX < -width * 0.22 : deltaX > width * 0.22);
+      gesture = null;
+      if (shouldTurn) {
+        page.classList.remove('is-dragging');
+        page.classList.add('is-turn-completing');
+        page.style.setProperty('--album-page-angle', `${forward ? -165 : 165}deg`);
+        window.setTimeout(() => turnAlbumPage(direction), 240);
+        return;
+      }
+      page.style.setProperty('--album-page-angle', '0deg');
+      page.classList.remove('is-dragging');
+      window.setTimeout(() => page.style.removeProperty('--album-page-angle'), 300);
+    };
+
+    page.addEventListener('pointerup', (event) => finishGesture(event));
+    page.addEventListener('pointercancel', (event) => finishGesture(event, true));
+    page.addEventListener('lostpointercapture', (event) => finishGesture(event, true));
+    page.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      turnAlbumPage(direction);
+    });
+  });
 }
 
 function moodLabel(mood, currentState) {
@@ -748,6 +882,7 @@ function attachPatientEvents(patient) {
     openGameModal(document.querySelector('[data-action="start-game"]').dataset.game || 'Memory Recall');
   });
   document.querySelector('[data-action="open-game-hub"]').addEventListener('click', () => renderGameHub(patient));
+  document.querySelector('[data-action="open-album"]').addEventListener('click', () => renderAlbumView(patient));
   document.querySelector('[data-action="open-routine"]').addEventListener('click', () => renderRoutineView(patient));
   document.querySelector('[data-action="open-reminders"]').addEventListener('click', () => renderReminderView(patient));
   document.querySelector('[data-action="open-map"]').addEventListener('click', () => renderMapView(patient));
@@ -1048,6 +1183,30 @@ function renderCaregiverDashboard(caregiver) {
             </div>
           </div>
         </div>
+        <section class="panel album-manager" aria-labelledby="album-manager-title">
+          <h3 id="album-manager-title">Photo Album</h3>
+          <p>Add the photos ${escapeHtml(patient.name)} will see when they open Album. They can flip through these photos without quizzes or questions.</p>
+          <form id="album-photo-form" class="form-grid">
+            <div class="field"><label for="album-photo-title">Photo caption</label><input id="album-photo-title" type="text" name="title" placeholder="For example, Family picnic" /></div>
+            <div class="field full"><label for="album-photo-description">Two sentences about this photo</label><textarea id="album-photo-description" name="description" rows="2" maxlength="300" placeholder="Who is in the photo and what are they doing? What makes this moment special?" required></textarea></div>
+            <div class="field"><label for="album-photo-file">Choose a photo</label><input id="album-photo-file" type="file" name="image" accept="image/*" required /></div>
+            <div class="field full"><button class="primary-btn" type="submit">Add photo to album</button></div>
+          </form>
+          <div class="album-photo-list">
+            ${state.images.filter((image) => image.patientId === patient.id && image.type === 'album').map((image) => `
+              <div class="album-photo-item" data-album-photo-item="${escapeHtml(image.id)}">
+                <img src="${image.src}" alt="${escapeHtml(image.title)}" />
+                <strong>${escapeHtml(image.title)}</strong>
+                <form class="album-description-form" data-album-description-form="${escapeHtml(image.id)}">
+                  <label for="album-description-${escapeHtml(image.id)}">Two sentences about this photo</label>
+                  <textarea id="album-description-${escapeHtml(image.id)}" name="description" rows="2" maxlength="300" required>${escapeHtml(image.description || '')}</textarea>
+                  <button class="small-btn" type="submit">Save description</button>
+                </form>
+                <button class="small-btn" type="button" data-album-remove="${escapeHtml(image.id)}" aria-label="Remove ${escapeHtml(image.title)} from album">Remove</button>
+              </div>
+            `).join('') || '<p>No album photos yet.</p>'}
+          </div>
+        </section>
         <div class="window">
           <div class="panel">
             <h3>${t('moodHistory', state)}</h3>
@@ -1181,6 +1340,74 @@ function bindCaregiverActions(caregiver, patient) {
       render();
     };
     reader.readAsDataURL(file);
+  });
+
+  document.getElementById('album-photo-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const file = formData.get('image');
+    const description = String(formData.get('description') || '').trim();
+    const sentenceCount = description.match(/[.!?](?=\s|$)/g)?.length || 0;
+    if (sentenceCount !== 2) {
+      showToast('Please write exactly two sentences about the photo.');
+      return;
+    }
+    if (!(file instanceof File) || !file.name) {
+      showToast('Choose a photo to add to the album.');
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      showToast('Choose an image file for the album.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onerror = () => showToast('The photo could not be read. Please try again.');
+    reader.onload = () => {
+      if (typeof reader.result !== 'string') {
+        showToast('The photo could not be read. Please try again.');
+        return;
+      }
+      const fallbackTitle = file.name.replace(/\.[^.]+$/, '');
+      try {
+        addAlbumPhoto(state, patient.id, reader.result, String(formData.get('title') || '').trim() || fallbackTitle, description);
+        render();
+      } catch (error) {
+        console.error('Failed to save album photo', error);
+        showToast('Could not save the photo. Try a smaller image.');
+      }
+    };
+    reader.readAsDataURL(file);
+  });
+
+  document.querySelectorAll('[data-album-description-form]').forEach((form) => {
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const description = String(new FormData(form).get('description') || '').trim();
+      const sentenceCount = description.match(/[.!?](?=\s|$)/g)?.length || 0;
+      if (sentenceCount !== 2) {
+        showToast('Please write exactly two sentences about the photo.');
+        return;
+      }
+      try {
+        updateAlbumPhotoDescription(state, form.dataset.albumDescriptionForm, description);
+        showToast('Photo description saved');
+      } catch (error) {
+        console.error('Failed to save album photo description', error);
+        showToast('Could not save the description. Please try again.');
+      }
+    });
+  });
+
+  document.querySelectorAll('[data-album-remove]').forEach((button) => {
+    button.addEventListener('click', () => {
+      try {
+        removeAlbumPhoto(state, button.dataset.albumRemove);
+        render();
+      } catch (error) {
+        console.error('Failed to remove album photo', error);
+        showToast('Could not remove the photo. Please try again.');
+      }
+    });
   });
 
   document.getElementById('room-form').addEventListener('submit', (event) => {
