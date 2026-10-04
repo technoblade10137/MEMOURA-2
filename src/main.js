@@ -13,7 +13,7 @@ import { saveSession } from './sessions.js';
 import { chooseDailyActivity, updateDifficulty } from './ai-difficulty.js';
 import { getRecallQuestion, getDishChallenge, getSequencePattern } from './games.js';
 import { createSequenceRound, evaluateSequence } from './sequence-game.js';
-import { generateReport, getAiInsights } from './reports.js';
+import { generateReport, getGameAnalysis } from './reports.js';
 
 let app = null;
 let state = null;
@@ -830,7 +830,7 @@ function renderCaregiverDashboard(caregiver) {
   const patient = state.patients.find((entry) => entry.id === caregiver.patientId) || state.patients[0];
   const patientSessions = state.sessions.filter((item) => item.patientId === patient.id);
   const report = generateReport(state, patient.id);
-  const insights = getAiInsights(state, patient.id);
+  const gameAnalysis = getGameAnalysis(state, patient.id);
   app.innerHTML = `
     <div class="app-shell">
       <div class="topbar">
@@ -958,10 +958,20 @@ function renderCaregiverDashboard(caregiver) {
             </div>
           </div>
           <div class="panel">
-            <h3>${t('insight', state)}</h3>
-            <ul>
-              ${insights.map((item) => `<li>${item}</li>`).join('')}
-            </ul>
+            <h3>AI game analysis</h3>
+            <p>${gameAnalysis.summary}</p>
+            ${gameAnalysis.games.length ? `
+              <div class="summary-grid">
+                ${gameAnalysis.games.map((game) => `
+                  <div class="summary-card">
+                    <strong>${game.name}</strong>
+                    <div>${game.averageAccuracy}% average accuracy • ${game.sessions} ${game.sessions === 1 ? 'session' : 'sessions'}</div>
+                  </div>
+                `).join('')}
+              </div>
+            ` : ''}
+            <p>${gameAnalysis.recommendation}</p>
+            <small>Based on saved game results. This is not a medical assessment.</small>
           </div>
         </div>
       </div>
