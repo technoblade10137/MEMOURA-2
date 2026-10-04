@@ -441,6 +441,62 @@ function playWinSound() {
   setTimeout(() => audioCtx.close(), 500);
 }
 
+function playApplauseSound() {
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtx) return;
+  const audioCtx = new AudioCtx();
+  const noiseBuffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.12, audioCtx.sampleRate);
+  const noiseData = noiseBuffer.getChannelData(0);
+  for (let index = 0; index < noiseData.length; index += 1) {
+    noiseData[index] = Math.random() * 2 - 1;
+  }
+
+  [0, 0.14, 0.31, 0.47, 0.65, 0.84, 1.04, 1.23].forEach((offset) => {
+    const source = audioCtx.createBufferSource();
+    const filter = audioCtx.createBiquadFilter();
+    const gain = audioCtx.createGain();
+    const start = audioCtx.currentTime + offset;
+    source.buffer = noiseBuffer;
+    filter.type = 'bandpass';
+    filter.frequency.value = 1700;
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(0.12, start + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.1);
+    source.connect(filter).connect(gain).connect(audioCtx.destination);
+    source.start(start);
+    source.stop(start + 0.12);
+  });
+  setTimeout(() => audioCtx.close(), 1500);
+}
+
+function showBirthdayBurst() {
+  const celebration = document.createElement('div');
+  const colors = ['#e8615c', '#4678d7', '#f2c94c', '#49a878', '#e681b5', '#f39b49'];
+  celebration.className = 'birthday-burst';
+  celebration.setAttribute('aria-hidden', 'true');
+
+  ['🎉', '🎊', '🎂'].forEach((emoji, index) => {
+    const popper = document.createElement('span');
+    popper.className = `birthday-popper birthday-popper-${index}`;
+    popper.textContent = emoji;
+    celebration.appendChild(popper);
+  });
+
+  for (let index = 0; index < 42; index += 1) {
+    const confetti = document.createElement('span');
+    confetti.className = 'birthday-confetti';
+    confetti.style.setProperty('--confetti-x', `${Math.random() * 90 - 45}vw`);
+    confetti.style.setProperty('--confetti-y', `${-20 - Math.random() * 65}vh`);
+    confetti.style.setProperty('--confetti-spin', `${Math.random() * 900 - 450}deg`);
+    confetti.style.setProperty('--confetti-delay', `${Math.random() * 0.28}s`);
+    confetti.style.setProperty('--confetti-color', colors[index % colors.length]);
+    celebration.appendChild(confetti);
+  }
+
+  document.body.appendChild(celebration);
+  setTimeout(() => celebration.remove(), 2300);
+}
+
 function stopTeaSortingMusic() {
   if (!teaMusicSession) return;
   const { audioCtx, noiseSource, droneOscillator, masterGain, loopId } = teaMusicSession;
@@ -521,6 +577,8 @@ function playTeaSortingMusic() {
 function celebrateWin(message) {
   showToast(message);
   playWinSound();
+  playApplauseSound();
+  showBirthdayBurst();
   const text = message.replace(/\s+/g, ' ').trim();
   if (state?.language) {
     speakText(text, state.language, state.settings.voiceOn);
