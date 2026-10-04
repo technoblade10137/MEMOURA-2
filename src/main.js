@@ -540,6 +540,28 @@ function playApplauseSound() {
   setTimeout(() => audioCtx.close(), 2200);
 }
 
+function playLeafDropSound() {
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtx) return;
+
+  const audioCtx = new AudioCtx();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+
+  const oscillator = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  const start = audioCtx.currentTime;
+  oscillator.type = 'triangle';
+  oscillator.frequency.setValueAtTime(520, start);
+  oscillator.frequency.exponentialRampToValueAtTime(250, start + 0.09);
+  gain.gain.setValueAtTime(0.0001, start);
+  gain.gain.exponentialRampToValueAtTime(0.12, start + 0.008);
+  gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.11);
+  oscillator.connect(gain).connect(audioCtx.destination);
+  oscillator.start(start);
+  oscillator.stop(start + 0.12);
+  setTimeout(() => audioCtx.close(), 180);
+}
+
 function showBirthdayBurst() {
   const celebration = document.createElement('div');
   const colors = ['#e8615c', '#4678d7', '#f2c94c', '#49a878', '#e681b5', '#f39b49'];
@@ -2265,12 +2287,13 @@ function attachGameEvents() {
 
         if (!droppedLeaf || droppedLeaf.classList.contains('sorted')) return;
 
+        playLeafDropSound();
         const leafType = droppedLeaf.dataset.leafType;
         const isCorrect = (leafType === 'green' && target === 'good') || (leafType === 'brown' && target === 'bad');
         if (isCorrect) {
           droppedLeaf.classList.add('sorted');
           droppedLeaf.setAttribute('draggable', 'false');
-          basket.appendChild(droppedLeaf);
+          basket.querySelector('.basket-body').appendChild(droppedLeaf);
           basket.classList.add('correct');
           setTimeout(() => basket.classList.remove('correct'), 400);
           const remaining = document.querySelectorAll('.leaf-token:not(.sorted)').length;
