@@ -71,6 +71,8 @@ input[type="radio"], input[type="checkbox"] { width: auto; }
 .stage-options, .mood-options, .language-options { display: flex; flex-wrap: wrap; gap: 10px; }
 .stage-option, .mood-option { background: #f0f3eb; border: 2px solid transparent; border-radius: 16px; padding: 10px 12px; font-weight: 700; color: var(--text); }
 .stage-option.active, .mood-option.active { border-color: #a45d35; background: #f7e8d9; }
+.mood-feedback { margin: 8px 0 0; padding: 12px 16px; border-left: 4px solid var(--primary); border-radius: 8px; background: #fffefa; color: var(--text); font-weight: 700; }
+.mood-feedback[hidden] { display: none; }
 
 .window { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 20px; }
 

@@ -361,8 +361,9 @@ function renderPatientDashboard(patient) {
               ['sad', '😟'],
               ['tired', '😴'],
               ['angry', '😠']
-            ].map(([mood, emoji]) => `<button class="mood-option" data-mood="${mood}">${emoji} ${moodLabel(mood, state)}</button>`).join('')}
+            ].map(([mood, emoji]) => `<button class="mood-option" type="button" data-mood="${mood}" aria-pressed="false">${emoji} ${moodLabel(mood, state)}</button>`).join('')}
           </div>
+          <p class="mood-feedback" id="mood-feedback" role="status" aria-live="polite" hidden></p>
         </div>
         <div class="window">
           <div class="panel">
@@ -415,6 +416,17 @@ function renderPatientDashboard(patient) {
 function moodLabel(mood, currentState) {
   const map = { happy: t('happy', currentState), sad: t('sad', currentState), tired: t('tired', currentState), angry: t('angry', currentState) };
   return map[mood] || mood;
+}
+
+function getMoodResponse(mood) {
+  const responseKeys = {
+    happy: 'moodResponseHappy',
+    sad: 'moodResponseSad',
+    tired: 'moodResponseTired',
+    angry: 'moodResponseAngry',
+  };
+  const key = responseKeys[mood];
+  return key ? t(key, state) : t('moodResponseDefault', state);
 }
 
 function playWinSound() {
@@ -617,8 +629,17 @@ function attachPatientEvents(patient) {
     button.addEventListener('click', () => {
       const mood = button.dataset.mood;
       addMood(state, patient.id, mood);
+      const response = getMoodResponse(mood);
+      const feedback = document.getElementById('mood-feedback');
+      feedback.textContent = response;
+      feedback.hidden = false;
+      document.querySelectorAll('[data-mood]').forEach((moodButton) => {
+        const selected = moodButton === button;
+        moodButton.classList.toggle('active', selected);
+        moodButton.setAttribute('aria-pressed', String(selected));
+      });
       showToast('Mood saved');
-      render();
+      speakText(response, state.language, state.settings.voiceOn);
     });
   });
   document.querySelector('[data-action="home"]').addEventListener('click', () => renderPatientDashboard(patient));
