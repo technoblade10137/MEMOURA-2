@@ -82,6 +82,10 @@ input[type="radio"], input[type="checkbox"] { width: auto; }
 
 .timeline { display: flex; flex-direction: column; gap: 10px; }
 .timeline-item { display: flex; align-items: center; gap: 12px; background: #f0f2eb; border-radius: 16px; padding: 12px; }
+.routine-item { flex-wrap: wrap; }
+.routine-item-details { flex: 1 1 180px; }
+.routine-completion { flex: 0 1 220px; }
+.routine-dot-complete { background: var(--success); }
 .dot { width: 14px; height: 14px; border-radius: 50%; background: #829b78; }
 
 .reminder-modal, .game-modal { position: fixed; inset: 0; background: rgba(30, 41, 34, 0.31); display: none; align-items: center; justify-content: center; z-index: 30; }

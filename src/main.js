@@ -6,7 +6,7 @@ import { getAssistantReply, buildDailySummary } from './ai-assistant.js';
 import { speakText } from './tts.js';
 import { showToast, requestNotificationPermission } from './notifications.js';
 import { addReminder, updateReminderStatus } from './reminders.js';
-import { addRoutine } from './routines.js';
+import { addRoutine, getRoutineForPatient, isRoutineComplete, toggleRoutineCompletion } from './routines.js';
 import { addJigsawImage, addMemoryRecallImage } from './images.js';
 import { toggleLocationSharing, addRoom } from './maps.js';
 import { saveSession } from './sessions.js';
@@ -390,9 +390,7 @@ function renderPatientDashboard(patient) {
         <div class="panel">
           <h3>${t('routineTitle', state)}</h3>
           <div class="timeline">
-            ${state.routines.filter((item) => item.patientId === patient.id).map((routine) => `
-              <div class="timeline-item"><span class="dot"></span><div><strong>${routine.title}</strong><div>${routine.time} • ${routine.days.join(', ')}</div></div></div>
-            `).join('') || '<p>No routine yet.</p>'}
+            ${renderPatientRoutineItems(patient)}
           </div>
         </div>
       </div>
@@ -652,12 +650,49 @@ function attachPatientEvents(patient) {
     speakText(reply, state.language, state.settings.voiceOn);
     input.value = '';
   });
+  bindRoutineCompletionEvents(() => renderPatientDashboard(patient));
   document.querySelectorAll('[data-reminder-action]').forEach((button) => {
     button.addEventListener('click', () => {
       const reminderId = button.dataset.reminderId;
       updateReminderStatus(state, reminderId, button.dataset.reminderAction === 'done' ? 'done' : 'postponed');
       document.getElementById('reminder-modal').classList.remove('show');
       render();
+    });
+  });
+}
+
+function renderPatientRoutineItems(patient) {
+  const routines = getRoutineForPatient(state, patient.id);
+  if (!routines.length) return '<p>No routine yet.</p>';
+
+  return routines.map((routine) => {
+    const completed = isRoutineComplete(routine);
+    const days = Array.isArray(routine.days) ? routine.days.join(', ') : '';
+    const timeAndDays = [routine.time, days].filter(Boolean).join(' • ');
+    const notes = routine.notes || routine.note || '';
+
+    return `
+      <div class="timeline-item routine-item">
+        <span class="dot ${completed ? 'routine-dot-complete' : ''}"></span>
+        <div class="routine-item-details">
+          <strong>${routine.title}</strong>
+          <div>${timeAndDays}${notes ? ` • ${notes}` : ''}</div>
+        </div>
+        <button class="${completed ? 'ghost-btn' : 'primary-btn'} routine-completion"
+          type="button" data-routine-completion="${routine.id}" aria-pressed="${completed}">
+          ${completed ? 'Completed today' : 'Mark complete today'}
+        </button>
+      </div>
+    `;
+  }).join('');
+}
+
+function bindRoutineCompletionEvents(onUpdate) {
+  document.querySelectorAll('[data-routine-completion]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const completed = toggleRoutineCompletion(state, button.dataset.routineCompletion);
+      showToast(completed ? 'Routine marked complete.' : 'Routine marked not complete.');
+      onUpdate();
     });
   });
 }
@@ -692,12 +727,13 @@ function renderRoutineView(patient) {
       <div class="panel">
         <h3>${t('routineTitle', state)}</h3>
         <div class="timeline">
-          ${state.routines.filter((item) => item.patientId === patient.id).map((routine) => `<div class="timeline-item"><span class="dot"></span><div><strong>${routine.title}</strong><div>${routine.time} • ${routine.note || ''}</div></div></div>`).join('')}
+          ${renderPatientRoutineItems(patient)}
         </div>
       </div>
     </div>
   `;
   document.querySelector('[data-action="home"]').addEventListener('click', () => render());
+  bindRoutineCompletionEvents(() => renderRoutineView(patient));
 }
 
 function renderReminderView(patient) {
@@ -837,14 +873,20 @@ function renderCaregiverDashboard(caregiver) {
         </div>
         <div class="window">
           <div class="panel">
-            <h3>${t('routineAdder', state)}</h3>
+            <h3>Add a routine</h3>
             <form id="routine-form" class="form-grid">
-              <div class="field full"><input name="title" placeholder="Activity" required /></div>
-              <div class="field"><input type="time" name="time" required /></div>
-              <div class="field"><input name="days" placeholder="Mon, Tue" /></div>
-              <div class="field full"><textarea name="note" placeholder="Notes"></textarea></div>
-              <div class="field full"><button class="primary-btn" type="submit">Save</button></div>
+              <div class="field full"><label for="routine-title">Activity</label><input id="routine-title" name="title" placeholder="For example, morning walk" required /></div>
+              <div class="field"><label for="routine-time">Time</label><input id="routine-time" type="time" name="time" required /></div>
+              <div class="field"><label for="routine-days">Days</label><input id="routine-days" name="days" placeholder="Mon, Tue" /></div>
+              <div class="field full"><label for="routine-note">Notes</label><textarea id="routine-note" name="note" placeholder="Optional details"></textarea></div>
+              <div class="field full"><button class="primary-btn" type="submit">Add routine</button></div>
             </form>
+            <h4>Saved routines</h4>
+            <div class="timeline">
+              ${getRoutineForPatient(state, patient.id).map((routine) => `
+                <div class="timeline-item"><span class="dot"></span><div><strong>${routine.title}</strong><div>${routine.time}${Array.isArray(routine.days) && routine.days.length ? ` • ${routine.days.join(', ')}` : ''}</div></div></div>
+              `).join('') || '<p>No routines added yet.</p>'}
+            </div>
           </div>
           <div class="panel">
             <h3>${t('gameManagement', state)}</h3>
