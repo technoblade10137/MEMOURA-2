@@ -582,14 +582,28 @@ input[type="radio"], input[type="checkbox"] { width: auto; }
 }
 
 @media (max-width: 480px) {
+  .game-modal.sandwich-game {
+    align-items: flex-start;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 8px 0;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+  }
+
   .game-modal.sandwich-game .modal-card.sandwich-modal-card {
     width: min(94vw, 100%);
+    max-height: none;
+    overflow: visible;
     padding: 8px 8px 10px;
     border-radius: 16px;
   }
 
   .sandwich-scene {
     gap: 8px;
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
   }
 
   .sandwich-topbar {
