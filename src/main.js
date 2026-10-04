@@ -445,40 +445,39 @@ function playApplauseSound() {
   const AudioCtx = window.AudioContext || window.webkitAudioContext;
   if (!AudioCtx) return;
   const audioCtx = new AudioCtx();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
   const noiseBuffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.14, audioCtx.sampleRate);
   const noiseData = noiseBuffer.getChannelData(0);
   for (let index = 0; index < noiseData.length; index += 1) {
     noiseData[index] = Math.random() * 2 - 1;
   }
 
-  const clapOffsets = Array.from({ length: 24 }, (_, index) => index * 0.065 + Math.random() * 0.055);
+  const clapOffsets = [0, 0.1, 0.22, 0.43, 0.54, 0.67, 0.9, 1.01, 1.15, 1.4, 1.52, 1.66];
   clapOffsets.forEach((offset) => {
-    const pulseOffsets = [0, 0.028, 0.061];
-    pulseOffsets.forEach((pulseOffset, pulseIndex) => {
+    [0, 0.024].forEach((pulseOffset, pulseIndex) => {
       const source = audioCtx.createBufferSource();
       const highPass = audioCtx.createBiquadFilter();
       const bodyFilter = audioCtx.createBiquadFilter();
       const gain = audioCtx.createGain();
       const panner = audioCtx.createStereoPanner();
       const start = audioCtx.currentTime + offset + pulseOffset;
-      const strength = (0.025 + Math.random() * 0.035) * (pulseIndex === 0 ? 1 : 0.55 / pulseIndex);
-
+      const strength = (0.12 + Math.random() * 0.04) * (pulseIndex === 0 ? 1 : 0.38);
       source.buffer = noiseBuffer;
       highPass.type = 'highpass';
-      highPass.frequency.value = 500 + Math.random() * 500;
+      highPass.frequency.value = 700 + Math.random() * 500;
       bodyFilter.type = 'bandpass';
-      bodyFilter.frequency.value = 1100 + Math.random() * 1500;
-      bodyFilter.Q.value = 0.8 + Math.random() * 1.2;
+      bodyFilter.frequency.value = 1300 + Math.random() * 1400;
+      bodyFilter.Q.value = 0.7 + Math.random() * 0.7;
       panner.pan.value = Math.random() * 1.6 - 0.8;
       gain.gain.setValueAtTime(0.0001, start);
-      gain.gain.exponentialRampToValueAtTime(strength, start + 0.004);
-      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.095);
+      gain.gain.exponentialRampToValueAtTime(strength, start + 0.003);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.075);
       source.connect(highPass).connect(bodyFilter).connect(gain).connect(panner).connect(audioCtx.destination);
       source.start(start);
-      source.stop(start + 0.11);
+      source.stop(start + 0.08);
     });
   });
-  setTimeout(() => audioCtx.close(), 2400);
+  setTimeout(() => audioCtx.close(), 2200);
 }
 
 function showBirthdayBurst() {
@@ -494,6 +493,13 @@ function showBirthdayBurst() {
     popper.textContent = emoji;
     celebration.appendChild(popper);
   });
+
+  for (let index = 0; index < 6; index += 1) {
+    const hands = document.createElement('span');
+    hands.className = `birthday-clap birthday-clap-${index}`;
+    hands.textContent = '👏';
+    celebration.appendChild(hands);
+  }
 
   for (let index = 0; index < 72; index += 1) {
     const confetti = document.createElement('span');

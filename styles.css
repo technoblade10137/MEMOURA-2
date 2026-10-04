@@ -866,10 +866,18 @@ input[type="radio"], input[type="checkbox"] { width: auto; }
 .birthday-popper-0 { left: 12%; }
 .birthday-popper-1 { left: 48%; animation-delay: 0.12s; }
 .birthday-popper-2 { right: 12%; animation-delay: 0.24s; }
+.birthday-clap { position: absolute; font-size: clamp(2rem, 5vw, 3.5rem); filter: drop-shadow(0 6px 8px rgba(32, 54, 81, 0.2)); animation: birthday-clap 1.2s ease-in-out 2; }
+.birthday-clap-0 { left: 8%; top: 34%; }
+.birthday-clap-1 { left: 30%; top: 47%; animation-delay: 0.12s; }
+.birthday-clap-2 { left: 60%; top: 32%; animation-delay: 0.22s; }
+.birthday-clap-3 { right: 8%; top: 48%; animation-delay: 0.08s; }
+.birthday-clap-4 { left: 17%; top: 59%; animation-delay: 0.28s; }
+.birthday-clap-5 { right: 21%; top: 60%; animation-delay: 0.18s; }
 .birthday-confetti { position: absolute; top: var(--burst-y); left: var(--burst-x); width: var(--confetti-width); height: var(--confetti-height); border-radius: var(--confetti-radius); background: var(--confetti-color); box-shadow: 0 1px 4px rgba(32, 54, 81, 0.2); animation: birthday-confetti 2.45s cubic-bezier(.16,.72,.28,1) var(--confetti-delay) forwards; }
 @keyframes birthday-launch { 0% { opacity: 0; transform: translateY(24px) scale(.35) rotate(-25deg); } 18% { opacity: 1; } 100% { opacity: 0; transform: translateY(-43vh) scale(1.4) rotate(22deg); } }
+@keyframes birthday-clap { 0%, 100% { opacity: 0; transform: scale(.55) rotate(-16deg); } 18%, 82% { opacity: 1; transform: scale(1.15) rotate(8deg); } 50% { opacity: 1; transform: scale(.88) rotate(-8deg); } }
 @keyframes birthday-confetti { 0% { opacity: 0; transform: translate(0, 0) rotate(0) scale(.25); } 12% { opacity: 1; transform: translate(0, 0) rotate(0) scale(1); } 58% { opacity: 1; transform: translate(var(--confetti-mid-x), var(--confetti-mid-y)) rotate(var(--confetti-mid-spin)); } 100% { opacity: 0; transform: translate(var(--confetti-x), calc(var(--confetti-y) + var(--confetti-fall-y))) rotate(var(--confetti-spin)); } }
-@media (prefers-reduced-motion: reduce) { .birthday-popper, .birthday-confetti { animation-duration: .01ms; } }
+@media (prefers-reduced-motion: reduce) { .birthday-popper, .birthday-clap, .birthday-confetti { animation-duration: .01ms; } }
 
 .grid-board { display: grid; gap: 8px; }
 .puzzle-slot {
