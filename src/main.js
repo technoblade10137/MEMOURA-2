@@ -2,6 +2,7 @@ import { loadStore, saveStore, getActivePatient, setCurrentUser } from './storag
 import { t, getGreeting } from './i18n.js';
 import { registerPatient, registerCaregiver, loginCaregiver, loginPatient } from './auth.js';
 import { addMood } from './profiles.js';
+import { addJournalEntry, getJournalDateKey, getJournalEntriesForPatient } from './journal.js';
 import { getAssistantReply, buildDailySummary } from './ai-assistant.js';
 import { speakText } from './tts.js';
 import { showToast, requestNotificationPermission } from './notifications.js';
@@ -365,6 +366,20 @@ function renderPatientDashboard(patient) {
           </div>
           <p class="mood-feedback" id="mood-feedback" role="status" aria-live="polite" hidden></p>
         </div>
+        <section class="panel mood-journal" id="mood-journal" hidden aria-labelledby="journal-title">
+          <h3 id="journal-title">${t('journalTitle', state)}</h3>
+          <p id="journal-prompt">${t('journalPrompt', state)}</p>
+          <form id="journal-form">
+            <input type="hidden" id="journal-mood" name="mood" />
+            <label for="journal-entry">${t('journalPlaceholder', state)}</label>
+            <textarea id="journal-entry" name="entry" rows="4" required maxlength="2000"></textarea>
+            <button class="primary-btn" type="submit">${t('saveJournalEntry', state)}</button>
+          </form>
+          <div class="journal-history">
+            <h4>${t('journalHistory', state)}</h4>
+            <div id="journal-history-list">${renderJournalHistory(patient)}</div>
+          </div>
+        </section>
         <div class="window">
           <div class="panel">
             <h3>${t('todaysActivity', state)}</h3>
@@ -427,6 +442,41 @@ function getMoodResponse(mood) {
   };
   const key = responseKeys[mood];
   return key ? t(key, state) : t('moodResponseDefault', state);
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  })[character]);
+}
+
+function renderJournalHistory(patient) {
+  const entries = getJournalEntriesForPatient(state, patient.id);
+  if (!entries.length) return `<p>${t('noJournalEntries', state)}</p>`;
+
+  const days = new Map();
+  entries.forEach((entry) => {
+    const date = entry.date || getJournalDateKey(new Date(entry.at));
+    if (!days.has(date)) days.set(date, []);
+    days.get(date).push(entry);
+  });
+
+  return Array.from(days, ([date, dayEntries]) => `
+    <section class="mood-journal-day">
+      <h5>${escapeHtml(new Date(`${date}T12:00:00`).toLocaleDateString())}</h5>
+      ${dayEntries.map((entry) => `
+        <article class="mood-journal-entry">
+          <strong>${escapeHtml(moodLabel(entry.mood, state))}</strong>
+          <small>${escapeHtml(new Date(entry.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }))}</small>
+          <p>${escapeHtml(entry.text)}</p>
+        </article>
+      `).join('')}
+    </section>
+  `).join('');
 }
 
 function playWinSound() {
@@ -633,6 +683,8 @@ function attachPatientEvents(patient) {
       const feedback = document.getElementById('mood-feedback');
       feedback.textContent = response;
       feedback.hidden = false;
+      document.getElementById('journal-mood').value = mood;
+      document.getElementById('mood-journal').hidden = false;
       document.querySelectorAll('[data-mood]').forEach((moodButton) => {
         const selected = moodButton === button;
         moodButton.classList.toggle('active', selected);
@@ -640,7 +692,24 @@ function attachPatientEvents(patient) {
       });
       showToast('Mood saved');
       speakText(response, state.language, state.settings.voiceOn);
+      document.getElementById('mood-journal').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      document.getElementById('journal-entry').focus({ preventScroll: true });
     });
+  });
+  document.getElementById('journal-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const text = String(formData.get('entry') || '').trim();
+    const mood = String(formData.get('mood') || '');
+    if (!text || !['happy', 'sad', 'tired', 'angry'].includes(mood)) {
+      showToast(t('journalPrompt', state));
+      return;
+    }
+
+    addJournalEntry(state, patient.id, mood, text);
+    event.currentTarget.reset();
+    document.getElementById('journal-history-list').innerHTML = renderJournalHistory(patient);
+    showToast(t('journalSaved', state));
   });
   document.querySelector('[data-action="home"]').addEventListener('click', () => renderPatientDashboard(patient));
   document.querySelector('[data-action="settings"]').addEventListener('click', () => openSettingsModal());

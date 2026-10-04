@@ -63,6 +63,7 @@ export function getDefaultState() {
       { id: 'mood_1', patientId: 'patient_demo', mood: 'happy', at: new Date(Date.now() - 86400000).toISOString() },
       { id: 'mood_2', patientId: 'patient_demo', mood: 'happy', at: new Date().toISOString() }
     ],
+    journals: [],
     sessions: [
       { id: 'session_1', patientId: 'patient_demo', game: 'Memory Recall', difficulty: 'Medium', score: 8, correct: 7, incorrect: 1, accuracy: 87, responseTime: 4.8, completionStatus: 'completed', hintsUsed: 1, retries: 1, abandonment: false, date: new Date(Date.now() - 86400000).toISOString(), aiChosenDifficulty: 'Medium' },
       { id: 'session_2', patientId: 'patient_demo', game: 'Sequence Recall', difficulty: 'Easy', score: 6, correct: 5, incorrect: 1, accuracy: 83, responseTime: 5.5, completionStatus: 'completed', hintsUsed: 2, retries: 0, abandonment: false, date: new Date().toISOString(), aiChosenDifficulty: 'Easy' }
@@ -103,6 +104,7 @@ export function getDefaultState() {
 function sanitizeStoredState(parsed) {
   const defaults = getDefaultState();
   const safe = { ...defaults, ...parsed };
+  safe.journals = Array.isArray(parsed?.journals) ? parsed.journals : defaults.journals;
   const defaultPatient = defaults.patients[0];
   const defaultCaregiver = defaults.caregivers[0];
 

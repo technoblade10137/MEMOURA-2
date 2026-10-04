@@ -73,6 +73,15 @@ input[type="radio"], input[type="checkbox"] { width: auto; }
 .stage-option.active, .mood-option.active { border-color: #a45d35; background: #f7e8d9; }
 .mood-feedback { margin: 8px 0 0; padding: 12px 16px; border-left: 4px solid var(--primary); border-radius: 8px; background: #fffefa; color: var(--text); font-weight: 700; }
 .mood-feedback[hidden] { display: none; }
+.mood-journal[hidden] { display: none; }
+.mood-journal form { display: grid; gap: 10px; }
+.mood-journal textarea { width: 100%; resize: vertical; }
+.journal-history { margin-top: 20px; }
+.mood-journal-day { margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--border); }
+.mood-journal-day h5 { margin: 4px 0 10px; }
+.mood-journal-entry { margin: 8px 0; padding: 12px; background: #f3f2eb; border-radius: 8px; }
+.mood-journal-entry small { margin-left: 8px; color: var(--muted); }
+.mood-journal-entry p { margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 .window { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 20px; }
 
