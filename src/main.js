@@ -445,33 +445,46 @@ function playApplauseSound() {
   const AudioCtx = window.AudioContext || window.webkitAudioContext;
   if (!AudioCtx) return;
   const audioCtx = new AudioCtx();
-  const noiseBuffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.12, audioCtx.sampleRate);
+  const noiseBuffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.14, audioCtx.sampleRate);
   const noiseData = noiseBuffer.getChannelData(0);
   for (let index = 0; index < noiseData.length; index += 1) {
     noiseData[index] = Math.random() * 2 - 1;
   }
 
-  [0, 0.14, 0.31, 0.47, 0.65, 0.84, 1.04, 1.23].forEach((offset) => {
-    const source = audioCtx.createBufferSource();
-    const filter = audioCtx.createBiquadFilter();
-    const gain = audioCtx.createGain();
-    const start = audioCtx.currentTime + offset;
-    source.buffer = noiseBuffer;
-    filter.type = 'bandpass';
-    filter.frequency.value = 1700;
-    gain.gain.setValueAtTime(0.0001, start);
-    gain.gain.exponentialRampToValueAtTime(0.12, start + 0.008);
-    gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.1);
-    source.connect(filter).connect(gain).connect(audioCtx.destination);
-    source.start(start);
-    source.stop(start + 0.12);
+  const clapOffsets = Array.from({ length: 24 }, (_, index) => index * 0.065 + Math.random() * 0.055);
+  clapOffsets.forEach((offset) => {
+    const pulseOffsets = [0, 0.028, 0.061];
+    pulseOffsets.forEach((pulseOffset, pulseIndex) => {
+      const source = audioCtx.createBufferSource();
+      const highPass = audioCtx.createBiquadFilter();
+      const bodyFilter = audioCtx.createBiquadFilter();
+      const gain = audioCtx.createGain();
+      const panner = audioCtx.createStereoPanner();
+      const start = audioCtx.currentTime + offset + pulseOffset;
+      const strength = (0.025 + Math.random() * 0.035) * (pulseIndex === 0 ? 1 : 0.55 / pulseIndex);
+
+      source.buffer = noiseBuffer;
+      highPass.type = 'highpass';
+      highPass.frequency.value = 500 + Math.random() * 500;
+      bodyFilter.type = 'bandpass';
+      bodyFilter.frequency.value = 1100 + Math.random() * 1500;
+      bodyFilter.Q.value = 0.8 + Math.random() * 1.2;
+      panner.pan.value = Math.random() * 1.6 - 0.8;
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(strength, start + 0.004);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.095);
+      source.connect(highPass).connect(bodyFilter).connect(gain).connect(panner).connect(audioCtx.destination);
+      source.start(start);
+      source.stop(start + 0.11);
+    });
   });
-  setTimeout(() => audioCtx.close(), 1500);
+  setTimeout(() => audioCtx.close(), 2400);
 }
 
 function showBirthdayBurst() {
   const celebration = document.createElement('div');
   const colors = ['#e8615c', '#4678d7', '#f2c94c', '#49a878', '#e681b5', '#f39b49'];
+  const burstPoints = [16, 50, 84];
   celebration.className = 'birthday-burst';
   celebration.setAttribute('aria-hidden', 'true');
 
@@ -482,19 +495,29 @@ function showBirthdayBurst() {
     celebration.appendChild(popper);
   });
 
-  for (let index = 0; index < 42; index += 1) {
+  for (let index = 0; index < 72; index += 1) {
     const confetti = document.createElement('span');
+    const burstIndex = index % burstPoints.length;
     confetti.className = 'birthday-confetti';
-    confetti.style.setProperty('--confetti-x', `${Math.random() * 90 - 45}vw`);
-    confetti.style.setProperty('--confetti-y', `${-20 - Math.random() * 65}vh`);
+    confetti.style.setProperty('--burst-x', `${burstPoints[burstIndex]}%`);
+    confetti.style.setProperty('--burst-y', `${62 + Math.random() * 16}vh`);
+    confetti.style.setProperty('--confetti-x', `${Math.random() * 34 - 17}vw`);
+    confetti.style.setProperty('--confetti-y', `${-18 - Math.random() * 42}vh`);
+    confetti.style.setProperty('--confetti-fall-y', `${10 + Math.random() * 18}vh`);
     confetti.style.setProperty('--confetti-spin', `${Math.random() * 900 - 450}deg`);
-    confetti.style.setProperty('--confetti-delay', `${Math.random() * 0.28}s`);
+    confetti.style.setProperty('--confetti-mid-x', `${Math.random() * 24 - 12}vw`);
+    confetti.style.setProperty('--confetti-mid-y', `${-12 - Math.random() * 29}vh`);
+    confetti.style.setProperty('--confetti-mid-spin', `${Math.random() * 650 - 325}deg`);
+    confetti.style.setProperty('--confetti-delay', `${Math.random() * 0.3}s`);
     confetti.style.setProperty('--confetti-color', colors[index % colors.length]);
+    confetti.style.setProperty('--confetti-width', `${6 + Math.random() * 7}px`);
+    confetti.style.setProperty('--confetti-height', `${10 + Math.random() * 10}px`);
+    confetti.style.setProperty('--confetti-radius', Math.random() > 0.65 ? '50%' : '2px');
     celebration.appendChild(confetti);
   }
 
   document.body.appendChild(celebration);
-  setTimeout(() => celebration.remove(), 2300);
+  setTimeout(() => celebration.remove(), 3000);
 }
 
 function stopTeaSortingMusic() {
