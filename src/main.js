@@ -57,9 +57,9 @@ let sandwichGameState = {
 let ludoState = {
   players: [
     { id: 'human', name: 'You', color: 'red', isHuman: true, tokens: [{ progress: -1 }, { progress: -1 }, { progress: -1 }, { progress: -1 }] },
-    { id: 'ai-green', name: 'AI Green', color: 'green', isHuman: false, tokens: [{ progress: -1 }, { progress: -1 }, { progress: -1 }, { progress: -1 }] },
-    { id: 'ai-yellow', name: 'AI Yellow', color: 'yellow', isHuman: false, tokens: [{ progress: -1 }, { progress: -1 }, { progress: -1 }, { progress: -1 }] },
-    { id: 'ai-blue', name: 'AI Blue', color: 'blue', isHuman: false, tokens: [{ progress: -1 }, { progress: -1 }, { progress: -1 }, { progress: -1 }] },
+    { id: 'ai-green', name: 'Green', color: 'green', isHuman: false, tokens: [{ progress: -1 }, { progress: -1 }, { progress: -1 }, { progress: -1 }] },
+    { id: 'ai-yellow', name: 'Yellow', color: 'yellow', isHuman: false, tokens: [{ progress: -1 }, { progress: -1 }, { progress: -1 }, { progress: -1 }] },
+    { id: 'ai-blue', name: 'Blue', color: 'blue', isHuman: false, tokens: [{ progress: -1 }, { progress: -1 }, { progress: -1 }, { progress: -1 }] },
   ],
   currentTurn: 0,
   dice: 1,
@@ -2015,9 +2015,9 @@ function initializeLudoGame() {
   ludoState = {
     players: [
       { id: 'human', name: 'You', color: 'red', isHuman: true, tokens: [{ progress: -1 }, { progress: -1 }, { progress: -1 }, { progress: -1 }] },
-      { id: 'ai-green', name: 'AI Green', color: 'green', isHuman: false, tokens: [{ progress: -1 }, { progress: -1 }, { progress: -1 }, { progress: -1 }] },
-      { id: 'ai-yellow', name: 'AI Yellow', color: 'yellow', isHuman: false, tokens: [{ progress: -1 }, { progress: -1 }, { progress: -1 }, { progress: -1 }] },
-      { id: 'ai-blue', name: 'AI Blue', color: 'blue', isHuman: false, tokens: [{ progress: -1 }, { progress: -1 }, { progress: -1 }, { progress: -1 }] },
+      { id: 'ai-green', name: 'Green', color: 'green', isHuman: false, tokens: [{ progress: -1 }, { progress: -1 }, { progress: -1 }, { progress: -1 }] },
+      { id: 'ai-yellow', name: 'Yellow', color: 'yellow', isHuman: false, tokens: [{ progress: -1 }, { progress: -1 }, { progress: -1 }, { progress: -1 }] },
+      { id: 'ai-blue', name: 'Blue', color: 'blue', isHuman: false, tokens: [{ progress: -1 }, { progress: -1 }, { progress: -1 }, { progress: -1 }] },
     ],
     currentTurn: 0,
     dice: 1,
