@@ -583,12 +583,16 @@ input[type="radio"], input[type="checkbox"] { width: auto; }
 
 @media (max-width: 480px) {
   .game-modal.sandwich-game {
+    display: block;
     align-items: flex-start;
     overflow-y: auto;
     overflow-x: hidden;
+    height: 100vh;
+    height: 100dvh;
     padding: 8px 0;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-y: contain;
+    touch-action: pan-y;
   }
 
   .game-modal.sandwich-game .modal-card.sandwich-modal-card {
@@ -624,9 +628,9 @@ input[type="radio"], input[type="checkbox"] { width: auto; }
 
   .sandwich-panel {
     padding: 10px;
-    min-height: 150px;
-    max-height: 220px;
-    overflow: auto;
+    min-height: 0;
+    max-height: none;
+    overflow: visible;
   }
 
   .panel-title {
@@ -634,8 +638,8 @@ input[type="radio"], input[type="checkbox"] { width: auto; }
   }
 
   .sandwich-stack {
-    max-height: 170px;
-    overflow-y: auto;
+    max-height: none;
+    overflow: visible;
     padding-right: 4px;
   }
 
@@ -654,12 +658,9 @@ input[type="radio"], input[type="checkbox"] { width: auto; }
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 6px;
-    max-height: 170px;
-    overflow-y: auto;
-    overflow-x: hidden;
+    max-height: none;
+    overflow: visible;
     padding-right: 4px;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: thin;
   }
 
   .ingredient-card {
