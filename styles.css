@@ -1339,3 +1339,63 @@ input[type="radio"], input[type="checkbox"] { width: auto; }
   .topbar { flex-direction: column; align-items: flex-start; }
   .hero { padding: 20px 14px; }
 }
+
+h1, h2, h3, h4, .brand, .ludo-title {
+  font-family: Georgia, 'Times New Roman', serif;
+  letter-spacing: 0;
+}
+
+.app-shell { max-width: 1080px; }
+.screen { gap: 18px; }
+.hero {
+  background: #eee7d9;
+  border: 1px solid #d8cdb9;
+  border-radius: 12px;
+  text-align: left;
+  padding: 28px;
+}
+.hero h1 { color: #314d39; }
+.hero p { max-width: 58ch; }
+.role-card, .form-card, .panel, .summary-card, .modal-card, .card-button,
+.timeline-item, .home-room, .room-card, .ludo-player-card {
+  border-radius: 12px;
+  box-shadow: none;
+}
+.role-card, .form-card, .panel, .modal-card {
+  border: 1px solid var(--border);
+}
+.role-card { border-top: 3px solid #8d9b77; }
+.role-card.active { border-color: #64836a; }
+.form-card, .panel, .modal-card { background: var(--card); }
+.card-button {
+  background: #fffefa;
+  border-color: #cbd5c8;
+  text-align: left;
+}
+.card-button:hover:not(:disabled) {
+  background: #f0f3eb;
+  border-color: #8b9e83;
+}
+.primary-btn, .ghost-btn, .small-btn, .danger-btn,
+.role-switch-btn, .stage-option, .mood-option, .answer-btn {
+  border-radius: 10px;
+  box-shadow: none;
+  transition: background-color .15s ease, border-color .15s ease;
+}
+.primary-btn { background: #426b50; }
+.primary-btn:hover:not(:disabled) { background: #34583f; }
+.ghost-btn, .small-btn { border: 1px solid #cbd5c8; background: #f3f4ed; }
+.small-btn.active { background: #dce6d8; }
+input, select, textarea { border-radius: 8px; }
+.summary-card, .timeline-item { background: #f3f2eb; }
+.home-room, .room-card {
+  background: #f2f1e9;
+  border: 1px solid #d5d8ca;
+}
+.home-room.tracked { background: #e5ece2; border-color: #829b78; box-shadow: none; }
+.ludo-board-shell, .ludo-player-card.active, .memory-recall-image,
+.jigsaw-piece-card, .sequence-choice-card.selected {
+  box-shadow: none;
+}
+.ludo-board-shell { background: #f4f1e7; border-radius: 10px; }
+.ludo-player-card.active { border-color: #426b50; background: #e8eee5; }
