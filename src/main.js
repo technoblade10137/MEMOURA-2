@@ -1567,14 +1567,15 @@ function renderSequenceGame() {
 }
 
 const LUDO_PATH = [
-  [6, 1], [6, 2], [6, 3], [6, 4], [5, 4], [4, 4], [3, 4], [2, 4], [1, 4], [1, 5], [1, 6], [1, 7], [1, 8],
-  [2, 8], [3, 8], [4, 8], [5, 8], [6, 8], [6, 9], [6, 10], [6, 11], [6, 12], [7, 12], [8, 12], [9, 12], [10, 12],
-  [10, 11], [10, 10], [10, 9], [10, 8], [11, 8], [12, 8], [13, 8], [13, 7], [13, 6], [13, 5], [13, 4], [12, 4],
-  [11, 4], [10, 4], [10, 3], [10, 2], [10, 1], [9, 1], [8, 1], [7, 1], [7, 2], [7, 3], [7, 4], [7, 5], [7, 6], [7, 7], [7, 8]
+  [6, 1], [6, 2], [6, 3], [6, 4], [6, 5], [6, 6], [5, 6], [4, 6], [3, 6], [2, 6], [1, 6], [1, 7], [1, 8],
+  [2, 8], [3, 8], [4, 8], [5, 8], [6, 8], [6, 9], [6, 10], [6, 11], [6, 12], [6, 13], [7, 13], [8, 13],
+  [8, 12], [8, 11], [8, 10], [8, 9], [8, 8], [9, 8], [10, 8], [11, 8], [12, 8], [13, 8], [13, 7], [13, 6],
+  [12, 6], [11, 6], [10, 6], [9, 6], [8, 6], [8, 5], [8, 4], [8, 3], [8, 2], [8, 1], [7, 1]
 ];
-const LUDO_START_OFFSETS = { red: 0, green: 13, yellow: 26, blue: 39 };
+const LUDO_TRACK_LENGTH = LUDO_PATH.length;
+const LUDO_START_OFFSETS = { red: 0, green: 12, yellow: 36, blue: 24 };
 const LUDO_SAFE_POSITIONS = new Set([
-  '6,1', '6,8', '6,12', '10,8', '13,8', '13,4', '10,4', '7,1', '7,8', '7,12', '7,4', '10,12', '1,4', '13,6'
+  '6,1', '1,8', '8,13', '13,6', '1,6', '6,13', '13,8', '8,1'
 ]);
 const LUDO_HOME_ZONES = {
   red: [[1, 1], [1, 2], [2, 1], [2, 2]],
@@ -1583,12 +1584,13 @@ const LUDO_HOME_ZONES = {
   blue: [[12, 12], [12, 13], [13, 12], [13, 13]],
 };
 const LUDO_HOME_LANES = {
-  red: [[6, 7], [6, 8], [6, 9], [6, 10], [6, 11], [6, 12]],
-  green: [[7, 8], [8, 8], [9, 8], [10, 8], [11, 8], [12, 8]],
-  yellow: [[8, 6], [8, 7], [8, 8], [8, 9], [8, 10], [8, 11]],
-  blue: [[7, 6], [7, 7], [7, 8], [7, 9], [7, 10], [7, 11]],
+  red: [[7, 2], [7, 3], [7, 4], [7, 5], [7, 6]],
+  green: [[2, 7], [3, 7], [4, 7], [5, 7], [6, 7]],
+  yellow: [[12, 7], [11, 7], [10, 7], [9, 7], [8, 7]],
+  blue: [[7, 12], [7, 11], [7, 10], [7, 9], [7, 8]],
 };
 const LUDO_CENTER = [7, 7];
+const LUDO_FINISH_PROGRESS = LUDO_TRACK_LENGTH + LUDO_HOME_LANES.red.length;
 
 function getLudoTokenKey(player, tokenIndex) {
   return `${player.color}-${tokenIndex}`;
@@ -1600,12 +1602,12 @@ function getLudoTokenPosition(player, tokenIndex) {
   if (progress === -1) {
     return LUDO_HOME_ZONES[player.color][tokenIndex];
   }
-  if (progress < 52) {
+  if (progress < LUDO_TRACK_LENGTH) {
     const boardIndex = (LUDO_START_OFFSETS[player.color] + progress) % LUDO_PATH.length;
     return LUDO_PATH[boardIndex];
   }
-  if (progress < 58) {
-    return LUDO_HOME_LANES[player.color][progress - 52] || LUDO_CENTER;
+  if (progress < LUDO_FINISH_PROGRESS) {
+    return LUDO_HOME_LANES[player.color][progress - LUDO_TRACK_LENGTH] || LUDO_CENTER;
   }
   return LUDO_CENTER;
 }
@@ -1630,7 +1632,7 @@ function cloneLudoState() {
 function getLudoLegalMoves(player, roll) {
   const moves = [];
   player.tokens.forEach((token, tokenIndex) => {
-    if (token.progress >= 57) return;
+    if (token.progress >= LUDO_FINISH_PROGRESS) return;
     if (token.progress === -1) {
       if (roll === 1 || roll === 6) {
         moves.push({ tokenIndex, from: -1, to: 0, start: true });
@@ -1638,7 +1640,7 @@ function getLudoLegalMoves(player, roll) {
       return;
     }
     const nextProgress = token.progress + roll;
-    if (nextProgress <= 57) {
+    if (nextProgress <= LUDO_FINISH_PROGRESS) {
       moves.push({ tokenIndex, from: token.progress, to: nextProgress, start: false });
     }
   });
@@ -1650,20 +1652,34 @@ function ludoPlaySound(type) {
   const AudioCtx = window.AudioContext || window.webkitAudioContext;
   if (!AudioCtx) return;
   const audioCtx = new AudioCtx();
-  const oscillator = audioCtx.createOscillator();
-  const gain = audioCtx.createGain();
-  oscillator.type = type === 'capture' ? 'sawtooth' : type === 'win' ? 'triangle' : 'sine';
-  const frequencyMap = { roll: 220, move: 330, capture: 480, win: 620, button: 170 };
-  oscillator.frequency.value = frequencyMap[type] || 260;
-  gain.gain.value = 0.04;
-  oscillator.connect(gain).connect(audioCtx.destination);
-  oscillator.start();
-  oscillator.stop(audioCtx.currentTime + 0.18);
-  setTimeout(() => audioCtx.close(), 220);
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  const melodies = {
+    roll: [220],
+    move: [392, 494],
+    capture: [440, 554],
+    home: [523, 659, 784],
+    win: [523, 659, 784, 1047],
+    button: [170],
+  };
+  const notes = melodies[type] || [260];
+  notes.forEach((frequency, index) => {
+    const oscillator = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    const start = audioCtx.currentTime + index * 0.13;
+    oscillator.type = type === 'capture' ? 'triangle' : 'sine';
+    oscillator.frequency.value = frequency;
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(type === 'win' ? 0.12 : 0.075, start + 0.025);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.2);
+    oscillator.connect(gain).connect(audioCtx.destination);
+    oscillator.start(start);
+    oscillator.stop(start + 0.22);
+  });
+  setTimeout(() => audioCtx.close(), notes.length * 130 + 280);
 }
 
 function ludoCheckWinner() {
-  const winner = ludoState.players.find((player) => player.tokens.every((token) => token.progress >= 57));
+  const winner = ludoState.players.find((player) => player.tokens.every((token) => token.progress >= LUDO_FINISH_PROGRESS));
   if (!winner) return null;
   ludoState.gameOver = true;
   ludoState.winner = winner;
@@ -1682,14 +1698,14 @@ function ludoCheckWinner() {
 function ludoApplyCapture(player, tokenIndex) {
   const playerInfo = ludoState.players[player];
   const token = playerInfo.tokens[tokenIndex];
-  if (token.progress < 0 || token.progress >= 52) return 0;
+  if (token.progress < 0 || token.progress >= LUDO_TRACK_LENGTH) return 0;
 
   const landingKey = getLudoBoardKey(getLudoTokenPosition(playerInfo, tokenIndex));
   let captures = 0;
   ludoState.players.forEach((opponent, opponentIndex) => {
     if (opponentIndex === player) return;
     opponent.tokens.forEach((opponentToken, opponentTokenIndex) => {
-      if (opponentToken.progress < 0 || opponentToken.progress >= 52) return;
+      if (opponentToken.progress < 0 || opponentToken.progress >= LUDO_TRACK_LENGTH) return;
       const opponentKey = getLudoBoardKey(getLudoTokenPosition(opponent, opponentTokenIndex));
       if (opponentKey === landingKey && !LUDO_SAFE_POSITIONS.has(landingKey)) {
         opponent.tokens[opponentTokenIndex].progress = -1;
@@ -1712,26 +1728,26 @@ function executeLudoMove(playerIndex, tokenIndex, roll) {
     token.progress += roll;
   }
 
-  if (token.progress > 57) {
-    token.progress = 57;
+  if (token.progress > LUDO_FINISH_PROGRESS) {
+    token.progress = LUDO_FINISH_PROGRESS;
   }
 
   const captures = ludoApplyCapture(playerIndex, tokenIndex);
   if (captures > 0) {
     ludoState.message = `${player.name} captured an opponent!`;
   } else if (previousProgress === -1) {
-    ludoState.message = `${player.name} moved a token out of home.`;
-  } else if (token.progress >= 57) {
-    ludoState.message = `${player.name} brought a token home!`;
+    ludoState.message = `${player.name} got a coin moving. Nice start!`;
+  } else if (token.progress >= LUDO_FINISH_PROGRESS) {
+    ludoState.message = `${player.name} brought a coin to the center! Great job!`;
     ludoState.score += 100;
   } else {
-    ludoState.message = `${player.name} moved a token.`;
+    ludoState.message = `${player.name} moved a token. Nice move!`;
     ludoState.score += 10;
   }
-  ludoPlaySound(captures > 0 ? 'capture' : 'move');
+  ludoPlaySound(captures > 0 ? 'capture' : token.progress >= LUDO_FINISH_PROGRESS ? 'home' : 'move');
 
-  if (token.progress >= 57) {
-    const completed = player.tokens.filter((entry) => entry.progress >= 57).length;
+  if (token.progress >= LUDO_FINISH_PROGRESS) {
+    const completed = player.tokens.filter((entry) => entry.progress >= LUDO_FINISH_PROGRESS).length;
     if (completed === 4) {
       ludoCheckWinner();
       return true;
@@ -1752,15 +1768,15 @@ function chooseLudoAiMove(player, legalMoves, roll) {
     const activePlayer = testPlayer[ludoState.currentTurn];
     const token = activePlayer.tokens[move.tokenIndex];
     const nextProgress = token.progress === -1 ? 0 : token.progress + roll;
-    if (nextProgress >= 58) return false;
-    const landingPosition = nextProgress < 52
+    if (nextProgress >= LUDO_FINISH_PROGRESS) return false;
+    const landingPosition = nextProgress < LUDO_TRACK_LENGTH
       ? LUDO_PATH[(LUDO_START_OFFSETS[activePlayer.color] + nextProgress) % LUDO_PATH.length]
-      : LUDO_HOME_LANES[activePlayer.color][nextProgress - 52] || LUDO_CENTER;
+      : LUDO_HOME_LANES[activePlayer.color][nextProgress - LUDO_TRACK_LENGTH] || LUDO_CENTER;
     const landingKey = getLudoBoardKey(landingPosition);
     return ludoState.players.some((opponent, index) => {
       if (index === ludoState.currentTurn) return false;
       return opponent.tokens.some((opponentToken) => {
-        if (opponentToken.progress < 0 || opponentToken.progress >= 52) return false;
+        if (opponentToken.progress < 0 || opponentToken.progress >= LUDO_TRACK_LENGTH) return false;
         const oppKey = getLudoBoardKey(getLudoTokenPosition(opponent, opponent.tokens.indexOf(opponentToken)));
         return oppKey === landingKey && !LUDO_SAFE_POSITIONS.has(landingKey);
       });
@@ -1809,7 +1825,10 @@ function getLudoBoardState() {
       if (row >= 9 && row <= 13 && col >= 9 && col <= 13) cellType = 'blue-home';
       if (key === '7,7') cellType = 'center';
       if (LUDO_PATH.some(([pathRow, pathCol]) => pathRow === row && pathCol === col)) cellType = 'path';
-      board[row][col] = { type: cellType, tokens: tokenMap.get(key) || [] };
+      const laneColor = Object.entries(LUDO_HOME_LANES)
+        .find(([, lane]) => lane.some(([laneRow, laneCol]) => laneRow === row && laneCol === col))?.[0] || null;
+      if (key === getLudoBoardKey(LUDO_CENTER)) cellType = 'center';
+      board[row][col] = { type: cellType, laneColor, tokens: tokenMap.get(key) || [] };
     }
   }
 
@@ -1855,11 +1874,11 @@ function renderLudoGame() {
   const board = getLudoBoardState();
   const currentPlayer = ludoState.players[ludoState.currentTurn];
   const humanPlayer = ludoState.players[0];
-  const humanCompleted = humanPlayer.tokens.filter((token) => token.progress >= 57).length;
+  const humanCompleted = humanPlayer.tokens.filter((token) => token.progress >= LUDO_FINISH_PROGRESS).length;
 
   const scoreboard = ludoState.players.map((player) => {
-    const completed = player.tokens.filter((token) => token.progress >= 57).length;
-    const active = player.tokens.filter((token) => token.progress >= 0 && token.progress < 57).length;
+    const completed = player.tokens.filter((token) => token.progress >= LUDO_FINISH_PROGRESS).length;
+    const active = player.tokens.filter((token) => token.progress >= 0 && token.progress < LUDO_FINISH_PROGRESS).length;
     return `
       <div class="ludo-player-card ${ludoState.currentTurn === ludoState.players.indexOf(player) ? 'active' : ''} ${player.color}">
         <div class="ludo-player-header">
@@ -1883,6 +1902,7 @@ function renderLudoGame() {
 
       <div class="ludo-main-layout">
         <div class="ludo-board-shell">
+          <div class="ludo-lane-guide">Bring all 4 coins through your colored middle lane to the center to win.</div>
           <div class="ludo-board traditional-board">
             ${board.map((row, rowIndex) => row.map((cell, colIndex) => {
               const isPath = cell.type === 'path';
@@ -1892,7 +1912,7 @@ function renderLudoGame() {
                 const isCurrent = isMovable && !ludoState.gameOver;
                 return `<button class="ludo-token token-${player.color} ${isCurrent ? 'movable' : ''}" data-player-index="${ludoState.players.indexOf(player)}" data-token-index="${tokenIndex}" type="button" ${isCurrent ? '' : 'disabled'}>${tokenIndex + 1}</button>`;
               }).join('');
-              return `<div class="ludo-cell ${cell.type} ${isPath ? 'ludo-path' : ''}">${tokenMarkup}</div>`;
+              return `<div class="ludo-cell ${cell.type} ${isPath ? 'ludo-path' : ''} ${cell.laneColor ? `ludo-lane-${cell.laneColor}` : ''}">${tokenMarkup}</div>`;
             }).join('')).join('')}
           </div>
         </div>
@@ -2481,7 +2501,7 @@ function attachGameEvents() {
           game: 'Ludo',
           difficulty: 'Medium',
           score: ludoState.score,
-          correct: ludoState.players[0].tokens.filter((token) => token.progress >= 57).length,
+          correct: ludoState.players[0].tokens.filter((token) => token.progress >= LUDO_FINISH_PROGRESS).length,
           incorrect: 0,
           accuracy: 100,
           responseTime: 6,

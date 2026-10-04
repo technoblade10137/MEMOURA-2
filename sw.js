@@ -1,4 +1,4 @@
-const CACHE_NAME = 'memoura-shell-v10';
+const CACHE_NAME = 'memoura-shell-v11';
 const ASSETS = ['/', '/index.html', '/styles.css', '/manifest.json', '/src/main.js', '/logo.jpeg'];
 
 self.addEventListener('install', (event) => {
