@@ -103,6 +103,13 @@ input[type="radio"], input[type="checkbox"] { width: auto; }
 .reminder-modal.show, .game-modal.show { display: flex; }
 .modal-card { background: #fffefa; border-radius: 24px; padding: 24px; width: min(460px, 90vw); box-shadow: 0 18px 40px rgba(37, 48, 39, .2); }
 .modal-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.game-modal.ludo-game-modal .modal-card { width: min(760px, 96vw); max-height: 94vh; overflow-y: auto; }
+.game-modal.ludo-game-modal .game-modal-header.hidden { display: none; }
+.reminder-list { display: flex; flex-direction: column; gap: 12px; }
+.reminder-item { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.reminder-item > div { min-width: 0; }
+.reminder-item p { margin: 6px 0 0; color: var(--muted); }
+.reminder-completed { color: var(--success); font-weight: 700; }
 
 .game-modal.build-the-dish { background: #100f2a; }
 .game-modal.build-the-dish .modal-card.build-the-dish-card {
@@ -1265,6 +1272,7 @@ input[type="radio"], input[type="checkbox"] { width: auto; }
 .ludo-panel { gap: 10px; }
 .traditional-ludo-panel { max-width: 820px; margin: 0 auto; }
 .ludo-topbar, .ludo-main-layout, .ludo-mini-controls { display: flex; justify-content: space-between; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ludo-topbar-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
 .ludo-main-layout { align-items: flex-start; }
 .ludo-title { font-size: clamp(1.1rem, 1.6vw, 1.6rem); font-weight: 800; letter-spacing: 0.08em; color: #7b4b29; }
 .ludo-turn { font-weight: 700; color: var(--brown); font-size: 0.9rem; }
@@ -1297,6 +1305,8 @@ input[type="radio"], input[type="checkbox"] { width: auto; }
   padding: 6px;
   border: 2px solid rgba(168, 178, 134, 0.7);
   box-shadow: inset 0 0 0 2px rgba(255,255,255,0.8), 0 8px 12px rgba(128, 138, 90, 0.12);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 .ludo-lane-guide { margin: 0 0 6px; color: var(--brown); font-size: 0.78rem; font-weight: 700; line-height: 1.35; text-align: center; }
 .traditional-board {
@@ -1360,6 +1370,10 @@ input[type="radio"], input[type="checkbox"] { width: auto; }
   .ludo-board-shell { min-width: 0; width: 100%; max-width: 300px; }
   .ludo-player-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .ludo-dice-button { width: 58px; height: 58px; }
+}
+
+@media (max-width: 480px) {
+  .reminder-item { align-items: flex-start; flex-direction: column; }
 }
 
 .location-status { display: flex; justify-content: space-between; align-items: center; gap: 16px; }

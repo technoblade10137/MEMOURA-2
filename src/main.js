@@ -12,7 +12,7 @@ import { addAlbumPhoto, addJigsawImage, addMemoryRecallImage, removeAlbumPhoto, 
 import { toggleLocationSharing, addRoom } from './maps.js';
 import { saveSession } from './sessions.js';
 import { chooseDailyActivity, updateDifficulty } from './ai-difficulty.js';
-import { getRecallQuestion, getDishChallenge, getSequencePattern } from './games.js';
+import { getRecallQuestion, getDishChallenge, getSequencePattern, buildRecallOptions, shuffleItems } from './games.js';
 import { createSequenceRound, evaluateSequence } from './sequence-game.js';
 import { generateReport, getGameAnalysis } from './reports.js';
 
@@ -987,12 +987,32 @@ function renderReminderView(patient) {
   app.innerHTML = `
     <div class="app-shell">
       <div class="topbar"><div class="brand">${t('reminders', state)}</div><button class="small-btn" data-action="home">${t('home', state)}</button></div>
-      <div class="panel">
-        ${state.reminders.filter((item) => item.patientId === patient.id).map((item) => `<div class="summary-card"><strong>${item.title}</strong><div>${item.time} • ${item.status}</div></div>`).join('') || '<p>No reminders yet.</p>'}
+      <div class="panel reminder-list">
+        ${state.reminders.filter((item) => item.patientId === patient.id).map((item) => `
+          <div class="summary-card reminder-item">
+            <div>
+              <strong>${escapeHtml(item.title)}</strong>
+              <div>${escapeHtml(item.time || '')} • ${escapeHtml(item.status)}</div>
+              ${item.note ? `<p>${escapeHtml(item.note)}</p>` : ''}
+            </div>
+            ${item.status === 'pending' ? `
+              <button class="primary-btn" type="button" data-reminder-completion="${escapeHtml(item.id)}">
+                Mark complete
+              </button>
+            ` : item.status === 'done' ? '<span class="reminder-completed">Completed</span>' : ''}
+          </div>
+        `).join('') || '<p>No reminders yet.</p>'}
       </div>
     </div>
   `;
   document.querySelector('[data-action="home"]').addEventListener('click', () => render());
+  document.querySelectorAll('[data-reminder-completion]').forEach((button) => {
+    button.addEventListener('click', () => {
+      updateReminderStatus(state, button.dataset.reminderCompletion, 'done');
+      showToast('Reminder marked complete.');
+      renderReminderView(patient);
+    });
+  });
 }
 
 function renderMapView(patient) {
@@ -1454,12 +1474,14 @@ function buildMemoryRecallSceneList(patientId) {
         { q: 'What happens here when you visit this place?', options: ['We spend time together and feel calm', 'We rush to catch a flight', 'We clean the whole town', 'We go to school'], answer: 'We spend time together and feel calm', image: 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&w=800&q=80' }
       ];
 
-  return scenes.slice(0, 5);
+  return shuffleItems(scenes).slice(0, 5).map((scene) => ({
+    ...scene,
+    options: buildRecallOptions(scene.answer, scene.options),
+  }));
 }
 
 function getSandwichIngredientOptions() {
   return [
-    { name: 'Bread', emoji: '🍞', color: '#d3a672', short: 'B' },
     { name: 'Lettuce', emoji: '🥬', color: '#94c76e', short: 'L' },
     { name: 'Tomato', emoji: '🍅', color: '#df6765', short: 'T' },
     { name: 'Cheese', emoji: '🧀', color: '#f1d170', short: 'C' },
@@ -1572,11 +1594,11 @@ function renderGameModal() {
   const existing = document.getElementById('game-modal');
   if (existing) existing.remove();
   const modal = document.createElement('div');
-  modal.className = `game-modal show ${currentGame === 'Make My Sandwich' ? 'sandwich-game' : ''}`.trim();
+  modal.className = `game-modal show ${currentGame === 'Make My Sandwich' ? 'sandwich-game' : ''} ${currentGame === 'Ludo' ? 'ludo-game-modal' : ''}`.trim();
   modal.id = 'game-modal';
   modal.innerHTML = `
     <div class="modal-card ${currentGame === 'Make My Sandwich' ? 'sandwich-modal-card' : ''}">
-      <div class="topbar game-modal-header ${currentGame === 'Make My Sandwich' ? 'hidden' : ''}">
+      <div class="topbar game-modal-header ${currentGame === 'Make My Sandwich' || currentGame === 'Ludo' ? 'hidden' : ''}">
         <h3>${currentGame}</h3>
         <button class="danger-btn" data-game-close="exit">${t('exit', state)}</button>
       </div>
@@ -1709,7 +1731,7 @@ function renderTeaGame() {
 }
 
 function renderSandwichStack(parts, includeLabel = false) {
-  const stack = parts && parts.length ? parts : ['Bread'];
+  const stack = parts && parts.length ? parts : [];
   const ingredientMap = Object.fromEntries(getSandwichIngredientOptions().map((ingredient) => [ingredient.name, ingredient]));
 
   return `
@@ -2288,7 +2310,10 @@ function renderLudoGame() {
           <div class="ludo-title">Memory Ludo</div>
           <div class="ludo-turn">${currentPlayer.isHuman ? 'Your Turn' : `${currentPlayer.name}'s Turn`}</div>
         </div>
-        <div class="ludo-score-box">Score: ${ludoState.score}</div>
+        <div class="ludo-topbar-actions">
+          <div class="ludo-score-box">Score: ${ludoState.score}</div>
+          <button class="danger-btn" type="button" data-game-close="exit">${t('exit', state)}</button>
+        </div>
       </div>
 
       <div class="ludo-main-layout">
@@ -2363,7 +2388,55 @@ function setupIngredientBankSwipe() {
   bank.addEventListener('pointercancel', stopDragging);
 }
 
+function bindLudoTouchGestures() {
+  const boardShell = document.querySelector('.ludo-board-shell');
+  const diceButton = document.getElementById('roll-dice');
+  const touchTargets = [boardShell, diceButton].filter(Boolean);
+
+  touchTargets.forEach((element) => {
+    if (element.dataset.ludoTouchBound === 'true') return;
+    element.dataset.ludoTouchBound = 'true';
+
+    let startX = 0;
+    let startY = 0;
+    let moved = false;
+
+    element.addEventListener('pointerdown', (event) => {
+      startX = event.clientX;
+      startY = event.clientY;
+      moved = false;
+      if (event.pointerType === 'touch' || event.pointerType === 'pen') {
+        element.setPointerCapture?.(event.pointerId);
+      }
+    });
+
+    element.addEventListener('pointermove', (event) => {
+      if (event.pointerType !== 'touch' && event.pointerType !== 'pen') return;
+      const deltaX = Math.abs(event.clientX - startX);
+      const deltaY = Math.abs(event.clientY - startY);
+      if (deltaX > 12 || deltaY > 12) {
+        moved = true;
+        event.preventDefault();
+      }
+    });
+
+    element.addEventListener('pointerup', (event) => {
+      if (event.pointerType !== 'touch' && event.pointerType !== 'pen') return;
+      const deltaX = Math.abs(event.clientX - startX);
+      const deltaY = Math.abs(event.clientY - startY);
+      if (!moved && deltaX + deltaY < 14) {
+        event.preventDefault();
+        element.click();
+      }
+    });
+  });
+}
+
 function attachGameEvents() {
+  if (currentGame === 'Ludo') {
+    bindLudoTouchGestures();
+  }
+
   document.querySelector('[data-game-close="exit"]')?.addEventListener('click', () => {
     const modal = document.getElementById('game-modal');
     modal.remove();

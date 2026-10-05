@@ -13,6 +13,26 @@ export const GAME_LIBRARY = {
   ludo: { name: 'Ludo', difficulty: ['Easy', 'Medium', 'Hard'] },
 };
 
+export function shuffleItems(items) {
+  const copy = [...items];
+  for (let index = copy.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [copy[index], copy[swapIndex]] = [copy[swapIndex], copy[index]];
+  }
+  return copy;
+}
+
+export function buildRecallOptions(answer, options = []) {
+  const uniqueOptions = [...new Set((options || []).map((option) => String(option)).filter(Boolean))];
+  const answerText = String(answer);
+
+  if (!uniqueOptions.includes(answerText)) {
+    uniqueOptions.push(answerText);
+  }
+
+  return shuffleItems(uniqueOptions);
+}
+
 export function getRecallQuestion(category = 'Mixed') {
   const questions = {
     Places: [
@@ -33,7 +53,11 @@ export function getRecallQuestion(category = 'Mixed') {
     ],
   };
   const list = questions[category] || questions.Mixed;
-  return list[Math.floor(Math.random() * list.length)];
+  const chosen = list[Math.floor(Math.random() * list.length)];
+  return {
+    ...chosen,
+    options: buildRecallOptions(chosen.answer, chosen.options),
+  };
 }
 
 export function getDishChallenge(favoriteFoods = []) {
