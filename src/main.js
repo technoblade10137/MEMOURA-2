@@ -2437,17 +2437,19 @@ function attachGameEvents() {
     bindLudoTouchGestures();
   }
 
-  document.querySelector('[data-game-close="exit"]')?.addEventListener('click', () => {
-    const modal = document.getElementById('game-modal');
-    modal.remove();
-    currentGame = null;
-    if (sequenceState.loopId) {
-      clearInterval(sequenceState.loopId);
-      sequenceState.loopId = null;
-    }
-    if (teaMusicSession) {
-      stopTeaSortingMusic();
-    }
+  document.querySelectorAll('[data-game-close="exit"]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const modal = document.getElementById('game-modal');
+      modal?.remove();
+      currentGame = null;
+      if (sequenceState.loopId) {
+        clearInterval(sequenceState.loopId);
+        sequenceState.loopId = null;
+      }
+      if (teaMusicSession) {
+        stopTeaSortingMusic();
+      }
+    });
   });
 
   if (currentGame === 'Memory Recall') {
