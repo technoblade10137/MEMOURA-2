@@ -1,20 +1,48 @@
+function getPatientSessions(state, patientId) {
+  return state.sessions.filter((session) => session.patientId === patientId);
+}
+
+function getMetricSessions(sessions) {
+  return sessions.filter((session) => {
+    if (typeof session.game !== 'string') return false;
+    if (!Number.isFinite(session.accuracy) || session.accuracy < 0 || session.accuracy > 100) return false;
+    if (session.game === 'Ludo' && session.performanceMetric !== 'completion') return false;
+    return true;
+  });
+}
+
+function getAverage(sessions) {
+  if (!sessions.length) return 0;
+  const totals = sessions.reduce((result, session) => {
+    const hasCounts = Number.isFinite(session.correct) && Number.isFinite(session.incorrect);
+    const weight = hasCounts ? Math.max(0, session.correct) + Math.max(0, session.incorrect) : 1;
+    result.weightedScore += session.accuracy * weight;
+    result.weight += weight;
+    return result;
+  }, { weightedScore: 0, weight: 0 });
+  return totals.weight ? Math.round(totals.weightedScore / totals.weight) : 0;
+}
+
 export function generateReport(state, patientId) {
-  const patientSessions = state.sessions.filter((session) => session.patientId === patientId);
-  const chart = [
-    { label: 'Games', value: patientSessions.length || 1 },
-    { label: 'Accuracy', value: patientSessions.length ? Math.round(patientSessions.reduce((acc, session) => acc + (session.accuracy || 0), 0) / patientSessions.length) : 0 },
-    { label: 'Hints', value: patientSessions.reduce((acc, session) => acc + (session.hintsUsed || 0), 0) },
-    { label: 'Routines', value: state.routines.filter((item) => item.patientId === patientId).length || 1 },
-  ];
-  return { chart, totals: { sessions: patientSessions.length, accuracy: chart[1].value, hints: chart[2].value } };
+  const sessions = getMetricSessions(getPatientSessions(state, patientId));
+  const analysis = getGameAnalysis(state, patientId);
+  const accuracySessions = sessions.filter((session) => session.performanceMetric !== 'completion');
+  const chart = analysis.games.map((game) => ({
+    label: game.name,
+    value: game.completionRate ?? game.averageAccuracy,
+  }));
+  return {
+    chart,
+    totals: {
+      sessions: sessions.length,
+      accuracy: getAverage(accuracySessions),
+      hints: sessions.reduce((total, session) => total + (Number.isFinite(session.hintsUsed) ? session.hintsUsed : 0), 0),
+    },
+  };
 }
 
 export function getGameAnalysis(state, patientId) {
-  const sessions = state.sessions.filter((session) => (
-    session.patientId === patientId
-    && typeof session.game === 'string'
-    && Number.isFinite(session.accuracy)
-  ));
+  const sessions = getMetricSessions(getPatientSessions(state, patientId));
 
   if (!sessions.length) {
     return {
@@ -31,20 +59,27 @@ export function getGameAnalysis(state, patientId) {
     sessionsByGame.set(session.game, gameSessions);
   });
 
-  const games = Array.from(sessionsByGame, ([name, gameSessions]) => ({
-    name,
-    sessions: gameSessions.length,
-    averageAccuracy: Math.round(gameSessions.reduce((total, session) => total + session.accuracy, 0) / gameSessions.length),
-  })).sort((first, second) => second.sessions - first.sessions || first.name.localeCompare(second.name));
+  const games = Array.from(sessionsByGame, ([name, gameSessions]) => {
+    const isCompletion = gameSessions.every((session) => session.performanceMetric === 'completion');
+    const average = getAverage(gameSessions);
+    return {
+      name,
+      sessions: gameSessions.length,
+      ...(isCompletion ? { completionRate: average } : { averageAccuracy: average }),
+    };
+  }).sort((first, second) => second.sessions - first.sessions || first.name.localeCompare(second.name));
 
-  const lowestAccuracyGame = games.reduce((lowest, game) => (
-    game.averageAccuracy < lowest.averageAccuracy ? game : lowest
-  ));
-  const gameWord = lowestAccuracyGame.sessions === 1 ? 'result' : 'results';
+  const accuracyGames = games.filter((game) => Number.isFinite(game.averageAccuracy));
+  const lowestAccuracyGame = accuracyGames.reduce((lowest, game) => (
+    !lowest || game.averageAccuracy < lowest.averageAccuracy ? game : lowest
+  ), null);
+  const gameWord = lowestAccuracyGame?.sessions === 1 ? 'result' : 'results';
 
   return {
     summary: `${sessions.length} saved ${sessions.length === 1 ? 'game result' : 'game results'} across ${games.length} ${games.length === 1 ? 'game' : 'games'}.`,
-    recommendation: `Offer ${lowestAccuracyGame.name} again at a comfortable pace; its average accuracy is ${lowestAccuracyGame.averageAccuracy}% across ${lowestAccuracyGame.sessions} ${gameWord}.`,
+    recommendation: lowestAccuracyGame
+      ? `Offer ${lowestAccuracyGame.name} again at a comfortable pace; its average accuracy is ${lowestAccuracyGame.averageAccuracy}% across ${lowestAccuracyGame.sessions} ${gameWord}.`
+      : 'Keep playing to build an accuracy history for the memory games.',
     games,
   };
 }

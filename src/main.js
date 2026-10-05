@@ -22,6 +22,7 @@ let currentGame = null;
 let activeQuestion = null;
 let currentRecallQuestions = [];
 let currentRecallIndex = 0;
+let recallIncorrectAnswers = 0;
 let sequenceState = {
   phase: 'intro',
   level: 1,
@@ -36,7 +37,8 @@ let sequenceState = {
   bestScore: 0,
   loopId: null,
 };
-let jigsawState = { placed: [], draggedPiece: null };
+let jigsawState = { placed: [], draggedPiece: null, incorrectDrops: 0 };
+let teaSortingIncorrectDrops = 0;
 let burgerSelection = [];
 let sandwichGameState = {
   difficulty: 'Easy',
@@ -73,6 +75,8 @@ let ludoState = {
   message: 'Your turn. Roll the dice!',
   aiRunning: false,
   rolling: false,
+  startedAt: Date.now(),
+  sessionSaved: false,
 };
 let teaMusicSession = null;
 const ingredientArt = {
@@ -1075,18 +1079,38 @@ function renderAssistantView(patient) {
 
 function renderProgressView(patient) {
   const report = generateReport(state, patient.id);
+  const gameAnalysis = getGameAnalysis(state, patient.id);
   app.innerHTML = `
     <div class="app-shell">
       <div class="topbar"><div class="brand">${t('progress', state)}</div><button class="small-btn" data-action="home">${t('home', state)}</button></div>
       <div class="panel">
         <h3>${t('report', state)}</h3>
-        <div class="chart">
-          ${report.chart.map((item) => `<div class="bar" style="height:${Math.max(item.value, 10)}%">${item.label}</div>`).join('')}
-        </div>
         <div class="summary-grid">
-          <div class="summary-card"><h4>Sessions</h4><p>${report.totals.sessions}</p></div>
-          <div class="summary-card"><h4>Accuracy</h4><p>${report.totals.accuracy}%</p></div>
+          <div class="summary-card"><h4>Recorded rounds</h4><p>${report.totals.sessions}</p></div>
+          <div class="summary-card"><h4>Average accuracy</h4><p>${report.totals.accuracy}%</p></div>
+          <div class="summary-card"><h4>Hints used</h4><p>${report.totals.hints}</p></div>
         </div>
+        <h4>Performance by game</h4>
+        ${gameAnalysis.games.length ? `
+          <div class="performance-list">
+            ${gameAnalysis.games.map((game) => {
+              const value = game.completionRate ?? game.averageAccuracy;
+              const label = game.completionRate !== undefined ? 'tokens completed' : 'accuracy';
+              return `
+                <div class="performance-row">
+                  <div class="performance-row-heading">
+                    <strong>${escapeHtml(game.name)}</strong>
+                    <span>${value}% ${label} · ${game.sessions} ${game.sessions === 1 ? 'round' : 'rounds'}</span>
+                  </div>
+                  <div class="performance-track" role="progressbar" aria-label="${escapeHtml(game.name)} ${label}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${value}">
+                    <span style="width:${value}%"></span>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        ` : '<p>Play a game to start tracking performance.</p>'}
+        <p class="mini-note">Accuracy is weighted by correct and incorrect answers or actions. Ludo is tracked separately by tokens brought home.</p>
       </div>
     </div>
   `;
@@ -1519,7 +1543,8 @@ function buildTargetSandwich(level = sandwichGameState.difficulty) {
 
 function openGameModal(name) {
   currentGame = name === 'Build the Dish' ? 'Make My Sandwich' : name;
-  jigsawState = { placed: [], draggedPiece: null };
+  jigsawState = { placed: [], draggedPiece: null, incorrectDrops: 0 };
+  teaSortingIncorrectDrops = 0;
   burgerSelection = [];
 
   if (currentGame === 'Make My Sandwich') {
@@ -1559,6 +1584,7 @@ function openGameModal(name) {
     const questions = buildMemoryRecallSceneList(patientId);
     currentRecallQuestions = questions;
     currentRecallIndex = 0;
+    recallIncorrectAnswers = 0;
     activeQuestion = questions[0];
     renderGameModal();
     return;
@@ -2280,6 +2306,8 @@ function initializeLudoGame() {
     message: 'Your turn. Roll the dice!',
     aiRunning: false,
     rolling: false,
+    startedAt: Date.now(),
+    sessionSaved: false,
   };
 }
 
@@ -2439,6 +2467,27 @@ function attachGameEvents() {
 
   document.querySelectorAll('[data-game-close="exit"]').forEach((button) => {
     button.addEventListener('click', () => {
+      if (currentGame === 'Ludo' && !ludoState.sessionSaved && ludoState.lastRoll !== null) {
+        const tokensHome = ludoState.players[0].tokens.filter((token) => token.progress >= LUDO_FINISH_PROGRESS).length;
+        const accuracy = Math.round((tokensHome / ludoState.players[0].tokens.length) * 100);
+        saveSession(state, {
+          patientId: state.currentUserId,
+          game: 'Ludo',
+          difficulty: 'Medium',
+          score: ludoState.score,
+          correct: tokensHome,
+          incorrect: ludoState.players[0].tokens.length - tokensHome,
+          accuracy,
+          performanceMetric: 'completion',
+          responseTime: Number(((Date.now() - ludoState.startedAt) / 1000).toFixed(1)),
+          completionStatus: ludoState.winner?.isHuman ? 'completed' : 'attempted',
+          hintsUsed: 0,
+          retries: 0,
+          abandonment: !ludoState.winner?.isHuman,
+          aiChosenDifficulty: 'Medium',
+        });
+        ludoState.sessionSaved = true;
+      }
       const modal = document.getElementById('game-modal');
       modal?.remove();
       currentGame = null;
@@ -2472,8 +2521,8 @@ function attachGameEvents() {
             difficulty: 'Medium',
             score: currentRecallQuestions.length * 10,
             correct: currentRecallQuestions.length,
-            incorrect: 0,
-            accuracy: 100,
+            incorrect: recallIncorrectAnswers,
+            accuracy: Math.round((currentRecallQuestions.length / (currentRecallQuestions.length + recallIncorrectAnswers)) * 100),
             responseTime: 4,
             completionStatus: 'completed',
             hintsUsed: 0,
@@ -2486,6 +2535,7 @@ function attachGameEvents() {
           document.getElementById('game-modal').remove();
           return;
         }
+        recallIncorrectAnswers += 1;
         showToast('Almost! Let\'s try another memory moment.');
       });
     });
@@ -2522,6 +2572,7 @@ function attachGameEvents() {
         if (!pieceId || jigsawState.placed.includes(pieceId)) return;
 
         if (pieceId !== slotId) {
+          jigsawState.incorrectDrops += 1;
           showToast('That piece belongs in a different spot. Try again.');
           return;
         }
@@ -2536,9 +2587,9 @@ function attachGameEvents() {
             game: 'Memory Jigsaw',
             difficulty: 'Easy',
             score: 10,
-            correct: 1,
-            incorrect: 0,
-            accuracy: 100,
+            correct: 6,
+            incorrect: jigsawState.incorrectDrops,
+            accuracy: Math.round((6 / (6 + jigsawState.incorrectDrops)) * 100),
             responseTime: 3,
             completionStatus: 'completed',
             hintsUsed: 0,
@@ -2601,14 +2652,15 @@ function attachGameEvents() {
           const remaining = document.querySelectorAll('.leaf-token:not(.sorted)').length;
           if (remaining === 0) {
             celebrateWin('Excellent! You sorted every leaf correctly.');
+            const correctLeaves = allLeaves.length;
             const session = {
               patientId: state.currentUserId,
               game: 'Tea Leaf Sorting',
               difficulty: 'Easy',
               score: 10,
-              correct: 1,
-              incorrect: 0,
-              accuracy: 100,
+              correct: correctLeaves,
+              incorrect: teaSortingIncorrectDrops,
+              accuracy: Math.round((correctLeaves / (correctLeaves + teaSortingIncorrectDrops)) * 100),
               responseTime: 4,
               completionStatus: 'completed',
               hintsUsed: 0,
@@ -2624,6 +2676,7 @@ function attachGameEvents() {
 
         basket.classList.add('wrong');
         setTimeout(() => basket.classList.remove('wrong'), 300);
+        teaSortingIncorrectDrops += 1;
         showToast('That leaf belongs in the other basket.');
       });
     });
@@ -2725,6 +2778,7 @@ function attachGameEvents() {
           }
           const isCorrect = sandwichGameState.selection.every((ingredient, index) => ingredient === expected[index]);
           if (isCorrect) {
+            const incorrectAttempts = sandwichGameState.consecutiveMistakes;
             sandwichGameState.completed = true;
             sandwichGameState.consecutiveWins += 1;
             sandwichGameState.consecutiveMistakes = 0;
@@ -2737,9 +2791,9 @@ function attachGameEvents() {
               game: 'Make My Sandwich',
               difficulty: sandwichGameState.difficulty,
               score: Math.max(30, roundScore),
-              correct: sandwichGameState.target.length,
-              incorrect: 0,
-              accuracy: 100,
+              correct: 1,
+              incorrect: incorrectAttempts,
+              accuracy: Math.round((1 / (1 + incorrectAttempts)) * 100),
               responseTime: 6,
               completionStatus: 'completed',
               hintsUsed: sandwichGameState.hintsUsed,
@@ -2963,22 +3017,6 @@ function attachGameEvents() {
         }
 
         ludoState.legalMoves = [];
-        const session = {
-          patientId: state.currentUserId,
-          game: 'Ludo',
-          difficulty: 'Medium',
-          score: ludoState.score,
-          correct: ludoState.players[0].tokens.filter((token) => token.progress >= LUDO_FINISH_PROGRESS).length,
-          incorrect: 0,
-          accuracy: 100,
-          responseTime: 6,
-          completionStatus: ludoState.gameOver ? 'completed' : 'attempted',
-          hintsUsed: 0,
-          retries: 0,
-          abandonment: false,
-          aiChosenDifficulty: 'Medium',
-        };
-        saveSession(state, session);
         ludoAdvanceTurn();
       });
     });

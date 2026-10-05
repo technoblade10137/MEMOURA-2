@@ -110,6 +110,11 @@ input[type="radio"], input[type="checkbox"] { width: auto; }
 .reminder-item > div { min-width: 0; }
 .reminder-item p { margin: 6px 0 0; color: var(--muted); }
 .reminder-completed { color: var(--success); font-weight: 700; }
+.performance-list { display: flex; flex-direction: column; gap: 14px; }
+.performance-row-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 5px; }
+.performance-row-heading span { color: var(--muted); text-align: right; }
+.performance-track { height: 12px; overflow: hidden; background: #e8eee5; border-radius: 999px; }
+.performance-track span { display: block; height: 100%; background: var(--primary); border-radius: inherit; }
 
 .game-modal.build-the-dish { background: #100f2a; }
 .game-modal.build-the-dish .modal-card.build-the-dish-card {
